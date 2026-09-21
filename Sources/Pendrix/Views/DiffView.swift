@@ -25,7 +25,8 @@ struct DiffView: View {
                 Text(file.binary ? "Binary file" : "No diff to show").font(Type.meta).foregroundStyle(.tertiary).padding(16)
                 Spacer()
             } else {
-                Scrolling(indicators: true) {
+                GeometryReader { geo in
+                Scrolling(axes: [.vertical, .horizontal], indicators: true) {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(file.hunks) { h in
                             Text(h.header).font(mono).foregroundStyle(.tertiary)
@@ -47,11 +48,14 @@ struct DiffView: View {
                                         }
                                     }
                                     .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .frame(width: geo.size.width, alignment: .leading)
                                 }
                             }
                         }
                     }
                     .padding(.bottom, 12)
+                    .frame(minWidth: geo.size.width, alignment: .leading)
+                }
                 }
             }
         }

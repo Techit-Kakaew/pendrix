@@ -196,6 +196,7 @@ struct ReviewView: View {
     private func content(_ d: ChangeDetail) -> some View {
         if let f = model.file(model.selectedFile) {
             DiffView(file: f, model: model)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .glass(radius: 14).padding(.horizontal, 18).padding(.bottom, 18)
         } else if model.commitMode {
             VStack(spacing: 8) {
