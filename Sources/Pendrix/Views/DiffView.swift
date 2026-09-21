@@ -54,7 +54,7 @@ struct DiffView: View {
                         }
                     }
                     .padding(.bottom, 12)
-                    .frame(minWidth: geo.size.width, alignment: .leading)
+                    .frame(minWidth: geo.size.width, minHeight: geo.size.height, alignment: .topLeading)
                 }
                 }
             }
