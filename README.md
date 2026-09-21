@@ -43,7 +43,7 @@ Built but hidden behind `Features.standup` (Sources/Pendrix/Features.swift). Yes
 
 ## Review in-app
 
-Click an MR/PR → review screen in the same window (Back / Esc returns): file list, unified diff, threads under their lines. Syntax highlighting by file extension (Highlightr). Click a line number to comment on it. Reply / Resolve per thread, Approve, Merge (confirmed). GitHub un-approve is web-only.
+Click an MR/PR → review screen in the same window (Back / Esc returns): file list, unified diff, threads under their lines. Header shows files / +− / commit count. The sidebar lists commits; click one to browse just that commit's files (read-only, comments stay on the whole change), "All changes" returns. Syntax highlighting by file extension (Highlightr). Click a line number to comment on it. Reply / Resolve per thread, Approve, Merge (confirmed). GitHub un-approve is web-only.
 
 Tokens go to Keychain. Everything else in UserDefaults.
 

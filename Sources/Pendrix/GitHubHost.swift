@@ -100,14 +100,16 @@ struct GitHubHost: CodeHost {
         async let issueComments: [IssueComment] = http.get(url(api, "repos/\(ref.project)/issues/\(ref.number)/comments", ["per_page": "100"]))
         async let me: GHUser = http.get(url(api, "user"))
         async let gql: GQLResponse = threads(owner: owner, name: name, number: ref.number)
-        let (p, fv, rv, ic, mev, g) = try await (pr, files, reviews, issueComments, me, gql)
-
-        let fileDiffs = fv.map { f -> FileDiff in
-            let hunks = DiffParser.parse(f.patch ?? "")
-            let st: FileDiff.Status = switch f.status { case "added": .added; case "removed": .deleted; case "renamed": .renamed; default: .modified }
-            return FileDiff(oldPath: f.previous_filename ?? f.filename, newPath: f.filename, status: st, hunks: hunks,
-                            additions: f.additions, deletions: f.deletions, binary: f.patch == nil)
+        async let cms: [GHCommit] = http.get(url(api, "repos/\(ref.project)/pulls/\(ref.number)/commits", ["per_page": "100"]))
+        let (p, fv, rv, ic, mev, g, cmv) = try await (pr, files, reviews, issueComments, me, gql, cms)
+        let commits = cmv.map { c in
+            CommitInfo(id: c.sha, short: String(c.sha.prefix(8)),
+                       title: c.commit.message.split(separator: "\n").first.map(String.init) ?? c.commit.message,
+                       author: c.author?.login ?? c.commit.author?.name ?? "", date: Dates.parse(c.commit.author?.date),
+                       url: URL(string: c.html_url))
         }
+
+        let fileDiffs = fv.map(Self.fileDiff)
         var threads: [ReviewThread] = g.data.repository.pullRequest.reviewThreads.nodes.compactMap { t in
             let cs = t.comments.nodes
             guard let first = cs.first else { return nil }
@@ -133,8 +135,20 @@ struct GitHubHost: CodeHost {
             state: p.mergeable_state ?? p.state, draft: p.draft ?? false,
             approvedByMe: latest[mev.login] == "APPROVED", approvals: approvers,
             mergeable: p.mergeable == true && p.mergeable_state == "clean",
-            pipeline: nil, files: fileDiffs, threads: threads,
+            pipeline: nil, files: fileDiffs, threads: threads, commits: commits,
             baseSHA: p.base.sha, startSHA: p.base.sha, headSHA: p.head.sha)
+    }
+
+    func commitDiff(_ ref: ChangeRef, sha: String) async throws -> [FileDiff] {
+        let c: GHCommitDetail = try await http.get(repo(ref, "/commits/\(sha)"))
+        return (c.files ?? []).map(Self.fileDiff)
+    }
+
+    fileprivate static func fileDiff(_ f: PRFile) -> FileDiff {
+        let hunks = DiffParser.parse(f.patch ?? "")
+        let st: FileDiff.Status = switch f.status { case "added": .added; case "removed": .deleted; case "renamed": .renamed; default: .modified }
+        return FileDiff(oldPath: f.previous_filename ?? f.filename, newPath: f.filename, status: st, hunks: hunks,
+                        additions: f.additions, deletions: f.deletions, binary: f.patch == nil)
     }
 
     private func threads(owner: String, name: String, number: Int) async throws -> GQLResponse {
@@ -201,7 +215,11 @@ struct GitHubHost: CodeHost {
         let mergeable: Bool?; let mergeable_state: String?; let user: GHUser?; let head: Ref; let base: Ref
     }
     private struct Ref: Decodable { let ref: String; let sha: String }
-    private struct PRFile: Decodable {
+    private struct GHCommit: Decodable { let sha: String; let html_url: String; let commit: GHCommitBody; let author: GHUser? }
+    private struct GHCommitBody: Decodable { let message: String; let author: GHCommitAuthor? }
+    private struct GHCommitAuthor: Decodable { let name: String?; let date: String? }
+    private struct GHCommitDetail: Decodable { let files: [PRFile]? }
+    fileprivate struct PRFile: Decodable {
         let filename: String; let status: String; let additions: Int; let deletions: Int
         let patch: String?; let previous_filename: String?
     }

@@ -52,6 +52,12 @@ struct ReviewView: View {
             HStack(spacing: 10) {
                 Text(d.author).font(Type.meta).foregroundStyle(.secondary)
                 Text("\(d.sourceBranch) → \(d.targetBranch)").font(Type.key).foregroundStyle(.tertiary).lineLimit(1)
+                HStack(spacing: 4) {
+                    Text("\(d.files.count) files").font(Type.meta).foregroundStyle(.secondary)
+                    Text("+\(d.additions)").font(Type.key).foregroundStyle(WorkItem.Tone.done.color)
+                    Text("−\(d.deletions)").font(Type.key).foregroundStyle(WorkItem.Tone.danger.color)
+                    Text("· \(d.commits.count) commits").font(Type.meta).foregroundStyle(.secondary)
+                }
                 if let p = d.pipeline { PipelineMark(status: p); Text(p).font(Type.meta).foregroundStyle(.tertiary) }
                 ForEach(linkedJira(d)) { j in LinkChip(item: j) { hub.open(j) } }
                 if !d.approvals.isEmpty {
@@ -100,18 +106,54 @@ struct ReviewView: View {
                 fileRow(title: "Conversation", meta: "\(model.threads(for: nil).count)", selected: model.selectedFile == nil, status: nil) {
                     model.selectedFile = nil
                 }
-                Text("FILES · \(d.files.count)").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
+                if let c = model.selectedCommit {
+                    HStack(spacing: 6) {
+                        Button("All changes") { model.showCommit(nil) }.buttonStyle(.plain).font(Type.meta).foregroundStyle(WorkItem.Tone.active.color)
+                        Text("›").foregroundStyle(.quaternary)
+                        Text(c.short).font(Type.key).foregroundStyle(.secondary)
+                        if model.commitLoading { ProgressView().controlSize(.mini) }
+                    }
                     .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 4)
-                ForEach(d.files) { f in
+                    Text(c.title).font(Type.meta).foregroundStyle(.secondary).lineLimit(2).padding(.horizontal, 12).padding(.bottom, 6)
+                }
+                Text("FILES · \(model.shownFiles.count)").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
+                    .padding(.horizontal, 12).padding(.top, model.commitMode ? 4 : 14).padding(.bottom, 4)
+                ForEach(model.shownFiles) { f in
                     let unresolved = model.threads(for: f.path).filter { !$0.resolved }.count
                     fileRow(title: f.path, meta: "+\(f.additions) −\(f.deletions)", selected: model.selectedFile == f.path,
                             status: f.status, threads: unresolved) { model.selectedFile = f.path }
+                }
+                if !d.commits.isEmpty {
+                    Text("COMMITS · \(d.commits.count)").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
+                        .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 4)
+                    ForEach(d.commits) { c in commitRow(c) }
                 }
             }
             .padding(10)
         }
         .glass(radius: 14)
         .padding(.leading, 18).padding(.bottom, 18)
+    }
+
+    private func commitRow(_ c: CommitInfo) -> some View {
+        let selected = model.selectedCommit?.id == c.id
+        return Button { model.showCommit(selected ? nil : c) } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(c.short).font(Type.key).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(c.title).font(Type.title).lineLimit(2)
+                    Text("\(c.author) · \(c.date.relative)").font(Type.meta).foregroundStyle(.tertiary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.primary.opacity(selected ? 0.10 : 0)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu { if let u = c.url { Button("Open commit in browser") { NSWorkspace.shared.open(u) } } }
+        .help(c.url?.absoluteString ?? c.id)
     }
 
     private func fileRow(title: String, meta: String, selected: Bool, status: FileDiff.Status?, threads: Int = 0, _ tap: @escaping () -> Void) -> some View {
@@ -155,6 +197,13 @@ struct ReviewView: View {
         if let f = model.file(model.selectedFile) {
             DiffView(file: f, model: model)
                 .glass(radius: 14).padding(.horizontal, 18).padding(.bottom, 18)
+        } else if model.commitMode {
+            VStack(spacing: 8) {
+                if model.commitLoading { ProgressView().controlSize(.small) }
+                else { Text(model.commitFiles.isEmpty ? "No files in this commit" : "Pick a file").font(Type.meta).foregroundStyle(.tertiary) }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .glass(radius: 14).padding(.horizontal, 18).padding(.bottom, 18)
         } else {
             ConversationView(detail: d, model: model)
                 .glass(radius: 14).padding(.horizontal, 18).padding(.bottom, 18)

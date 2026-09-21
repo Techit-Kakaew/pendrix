@@ -417,6 +417,11 @@ final class Hub: ObservableObject {
                 ReviewThread(id: "t2", anchor: nil, resolved: false, resolvable: false,
                              comments: [Comment(id: "c3", author: "Ken W.", body: "Ran this against staging, dedupe works.", created: Date().addingTimeInterval(-7200))]),
             ],
+            commits: [
+                CommitInfo(id: "9f3c1a2b", short: "9f3c1a2", title: "feat(refund): persist idempotency key across retries", author: "Nattapong S.", date: Date().addingTimeInterval(-7200), url: nil),
+                CommitInfo(id: "2b7e0d91", short: "2b7e0d9", title: "test: retry reuses key", author: "Nattapong S.", date: Date().addingTimeInterval(-5400), url: nil),
+                CommitInfo(id: "c41a88e0", short: "c41a88e", title: "chore: widen backoff cap to 300s", author: "Nattapong S.", date: Date().addingTimeInterval(-3600), url: nil),
+            ],
             baseSHA: "a", startSHA: "a", headSHA: "b")
     }
 }

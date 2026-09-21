@@ -14,6 +14,28 @@ final class ReviewModel: ObservableObject {
     @Published var selectedFile: String? = nil     // nil = conversation
     @Published var composing: LineAnchor? = nil    // line being commented on
     @Published var flash: String? = nil
+    /// Commit mode: browsing one commit's files instead of the whole change. Commenting is off there.
+    @Published var selectedCommit: CommitInfo? = nil
+    @Published var commitFiles: [FileDiff] = []
+    @Published var commitLoading = false
+    var commitMode: Bool { selectedCommit != nil }
+    var shownFiles: [FileDiff] { commitMode ? commitFiles : (detail?.files ?? []) }
+
+    func showCommit(_ c: CommitInfo?) {
+        selectedCommit = c; commitFiles = []; composing = nil
+        guard let c else { selectedFile = detail?.files.first?.path; return }
+        selectedFile = nil
+        guard let host else { return }
+        commitLoading = true
+        Task {
+            defer { commitLoading = false }
+            do {
+                let files = try await host.commitDiff(ref, sha: c.id)
+                guard selectedCommit?.id == c.id else { return }
+                commitFiles = files; selectedFile = files.first?.path
+            } catch { self.error = error.localizedDescription }
+        }
+    }
 
     init(ref: ChangeRef, host: CodeHost?, kind: HostKind) {
         self.ref = ref; self.host = host; self.kind = kind
@@ -35,10 +57,10 @@ final class ReviewModel: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
 
-    func file(_ path: String?) -> FileDiff? { detail?.files.first { $0.path == path } }
+    func file(_ path: String?) -> FileDiff? { shownFiles.first { $0.path == path } }
 
     func threads(for path: String?) -> [ReviewThread] {
-        detail?.threads.filter { $0.anchor?.path == path } ?? []
+        commitMode ? [] : (detail?.threads.filter { $0.anchor?.path == path } ?? [])
     }
     func threads(at line: DiffLine, in path: String) -> [ReviewThread] {
         threads(for: path).filter { t in

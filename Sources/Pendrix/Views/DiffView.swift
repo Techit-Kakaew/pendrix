@@ -82,8 +82,8 @@ struct DiffView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Comment on this line")
-            .disabled(l.kind == .meta)
+            .help(model.commitMode ? "Comments are made on the whole change, not on a commit" : "Comment on this line")
+            .disabled(l.kind == .meta || model.commitMode)
             Text(sign).font(mono).foregroundStyle(l.kind == .add ? WorkItem.Tone.done.color : l.kind == .del ? WorkItem.Tone.danger.color : .clear)
                 .frame(width: 12)
             Group {

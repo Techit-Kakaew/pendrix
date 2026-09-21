@@ -129,15 +129,12 @@ struct GitLabHost: CodeHost {
         async let disc: [Discussion] = http.get(mr(ref, "/discussions", ["per_page": "100"]))
         async let appr: Approvals = http.get(mr(ref, "/approvals"))
         async let me: User = http.get(api("user"))
-        let (mrv, dv, discv, ap, mev) = try await (m, diffs, disc, appr, me)
+        async let cms: [GLCommit] = http.get(mr(ref, "/commits", ["per_page": "100"]))
+        let (mrv, dv, discv, ap, mev, cmv) = try await (m, diffs, disc, appr, me, cms)
+        let commits = cmv.map { CommitInfo(id: $0.id, short: $0.short_id, title: $0.title, author: $0.author_name ?? "",
+                                           date: Dates.parse($0.created_at), url: $0.web_url.flatMap(URL.init)) }
 
-        let files = dv.map { d -> FileDiff in
-            let hunks = DiffParser.parse(d.diff)
-            let (a, del) = DiffParser.counts(hunks)
-            let st: FileDiff.Status = d.new_file ? .added : d.deleted_file ? .deleted : d.renamed_file ? .renamed : .modified
-            return FileDiff(oldPath: d.old_path, newPath: d.new_path, status: st, hunks: hunks, additions: a, deletions: del,
-                            binary: d.diff.isEmpty && !d.new_file && !d.deleted_file)
-        }
+        let files = dv.map(Self.fileDiff)
         let threads = discv.compactMap { d -> ReviewThread? in
             let notes = d.notes.filter { !$0.system }
             guard let first = notes.first else { return nil }
@@ -157,8 +154,21 @@ struct GitLabHost: CodeHost {
             draft: mrv.draft ?? false,
             approvedByMe: ap.approved_by?.contains { $0.user.id == mev.id } ?? false,
             approvals: approvers, mergeable: mrv.detailed_merge_status == "mergeable",
-            pipeline: mrv.head_pipeline?.status, files: files, threads: threads,
+            pipeline: mrv.head_pipeline?.status, files: files, threads: threads, commits: commits,
             baseSHA: mrv.diff_refs?.base_sha ?? "", startSHA: mrv.diff_refs?.start_sha ?? "", headSHA: mrv.diff_refs?.head_sha ?? "")
+    }
+
+    func commitDiff(_ ref: ChangeRef, sha: String) async throws -> [FileDiff] {
+        let dv: [Diff] = try await http.get(api("projects/\(ref.project)/repository/commits/\(sha)/diff", ["per_page": "200"]))
+        return dv.map(Self.fileDiff)
+    }
+
+    fileprivate static func fileDiff(_ d: Diff) -> FileDiff {
+        let hunks = DiffParser.parse(d.diff)
+        let (a, del) = DiffParser.counts(hunks)
+        let st: FileDiff.Status = d.new_file ? .added : d.deleted_file ? .deleted : d.renamed_file ? .renamed : .modified
+        return FileDiff(oldPath: d.old_path, newPath: d.new_path, status: st, hunks: hunks, additions: a, deletions: del,
+                        binary: d.diff.isEmpty && !d.new_file && !d.deleted_file)
     }
 
     // MARK: actions
@@ -213,7 +223,10 @@ struct GitLabHost: CodeHost {
     private struct Person: Decodable { let id: Int?; let name: String }
     private struct Refs: Decodable { let short: String?; let full: String? }
     private struct Pipeline: Decodable { let status: String }
-    private struct Diff: Decodable {
+    private struct GLCommit: Decodable {
+        let id: String; let short_id: String; let title: String; let author_name: String?; let created_at: String?; let web_url: String?
+    }
+    fileprivate struct Diff: Decodable {
         let old_path: String; let new_path: String; let diff: String
         let new_file: Bool; let renamed_file: Bool; let deleted_file: Bool
     }

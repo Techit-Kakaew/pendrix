@@ -67,6 +67,15 @@ struct ReviewThread: Identifiable, Hashable {
     var replyHandle: String? = nil
 }
 
+struct CommitInfo: Identifiable, Hashable {
+    let id: String          // full sha
+    let short: String
+    let title: String
+    let author: String
+    let date: Date
+    let url: URL?
+}
+
 struct ChangeDetail {
     var ref: ChangeRef
     var title: String
@@ -83,6 +92,9 @@ struct ChangeDetail {
     var pipeline: String?
     var files: [FileDiff]
     var threads: [ReviewThread]
+    var commits: [CommitInfo] = []
+    var additions: Int { files.reduce(0) { $0 + $1.additions } }
+    var deletions: Int { files.reduce(0) { $0 + $1.deletions } }
     /// GitLab needs base/start/head for new line comments; GitHub only head.
     var baseSHA: String
     var startSHA: String
@@ -95,6 +107,8 @@ protocol CodeHost {
     /// What the token's user did since `since`: pushes, MRs opened, approvals, comments, merges.
     func activity(since: Date) async throws -> [Activity]
     func detail(_ ref: ChangeRef) async throws -> ChangeDetail
+    /// Files touched by one commit of the change (no threads; commenting is MR-level).
+    func commitDiff(_ ref: ChangeRef, sha: String) async throws -> [FileDiff]
     func comment(_ ref: ChangeRef, at anchor: LineAnchor?, body: String, detail: ChangeDetail) async throws
     func reply(_ ref: ChangeRef, thread: ReviewThread, body: String) async throws
     func resolve(_ ref: ChangeRef, thread: ReviewThread, resolved: Bool) async throws
