@@ -9,6 +9,7 @@ import SwiftUI
 final class Hub: ObservableObject {
     @Published var jira: [WorkItem] = []
     @Published var reviews: [WorkItem] = []
+    @Published var approved: [WorkItem] = []
     @Published var ownMRs: [WorkItem] = []
     @Published var todos: [WorkItem] = []
     @Published var jiraError: String?
@@ -68,6 +69,7 @@ final class Hub: ObservableObject {
     var visibleReviews: [WorkItem] { visible(reviews, drafts: false) }
     var visibleTodos: [WorkItem] { visible(todos) }
     var visibleOwn: [WorkItem] { visible(ownMRs) }
+    var visibleApproved: [WorkItem] { visible(approved) }
     var hiddenCount: Int { (jira.count + reviews.count + todos.count + ownMRs.count) - (visibleJira.count + visibleReviews.count + visibleTodos.count + visibleOwn.count) }
 
     /// Repo/project prefix for grouping: "pay/gateway!482" → "pay/gateway", "PAY-412" → "PAY".
@@ -93,7 +95,7 @@ final class Hub: ObservableObject {
 
     @Published var selectedID: String? = nil
     /// Everything on screen in reading order, for j/k.
-    var orderedItems: [WorkItem] { visibleJira + visibleReviews + visibleTodos + visibleOwn }
+    var orderedItems: [WorkItem] { visibleJira + visibleReviews + visibleTodos + visibleApproved + visibleOwn }
     func moveSelection(_ delta: Int) {
         let items = orderedItems; guard !items.isEmpty else { return }
         let idx = items.firstIndex { $0.id == selectedID } ?? (delta > 0 ? -1 : items.count)
@@ -130,7 +132,7 @@ final class Hub: ObservableObject {
         async let g: Void = refreshHosts()
         _ = await (j, g)
 
-        let all = Set((jira + reviews + ownMRs + todos).map(\.id))
+        let all = Set((jira + reviews + ownMRs + todos + approved).map(\.id))
         let fresh = all.subtracting(known)
         if seeded || !known.isEmpty {
             let pings = (reviews + todos + jira).filter { fresh.contains($0.id) }
@@ -169,18 +171,19 @@ final class Hub: ObservableObject {
 
     private func refreshHosts() async {
         let hosts = config.hosts.filter(\.ready).compactMap(makeHost)
-        var r: [WorkItem] = [], o: [WorkItem] = [], t: [WorkItem] = []
+        var r: [WorkItem] = [], o: [WorkItem] = [], t: [WorkItem] = [], a: [WorkItem] = []
         var errs: [UUID: String] = [:]
         await withTaskGroup(of: (UUID, Result<Inbox, Error>).self) { group in
             for h in hosts { group.addTask { (h.config.id, await Result { try await h.inbox() }) } }
             for await (id, res) in group {
                 switch res {
-                case .success(let i): r += i.reviews; o += i.own; t += i.todos
+                case .success(let i): r += i.reviews; o += i.own; t += i.todos; a += i.approved
                 case .failure(let e): errs[id] = e.localizedDescription
                 }
             }
         }
         reviews = r.sorted { $0.updated > $1.updated }
+        approved = a.sorted { $0.updated > $1.updated }
         ownMRs = o.sorted { $0.updated > $1.updated }
         todos = t.sorted { $0.updated > $1.updated }
         hostErrors = errs
@@ -368,6 +371,9 @@ final class Hub: ObservableObject {
         ownMRs = [
             WorkItem(id: "gl:mr:4", source: .gitlab, kind: .ownMergeRequest, key: "pay/gateway!479", title: "fix(ledger): settlement rounding on multi-currency", subtitle: "fix/ledger-rounding", url: u, updated: ago(1.5), status: "mergeable", statusTone: .done, pipeline: "success", approvals: 2, hostLabel: "git.7.solutions"),
             WorkItem(id: "gl:mr:5", source: .gitlab, kind: .ownMergeRequest, key: "core/sdk!88", title: "refactor: hexagonal ports for payment adapters", subtitle: "refactor/ports", url: u, updated: ago(20), status: "conflicts", statusTone: .danger, hasConflicts: true, pipeline: "success", hostLabel: "git.7.solutions"),
+        ]
+        approved = [
+            WorkItem(id: "gl:mr:6", source: .gitlab, kind: .reviewRequest, key: "pay/gateway!470", title: "fix(webhook): verify signature before parsing", subtitle: "Beam T.", url: u, updated: ago(9), status: "approved · not_approved", statusTone: .done, pipeline: "success", approvals: 1, approvedByMe: true, hostLabel: "git.7.solutions"),
         ]
         todos = [
             WorkItem(id: "gl:todo:9", source: .gitlab, kind: .todo, key: "pay/gateway#203", title: "Timeout on 3DS callback under load", subtitle: "Beam T. · mentioned you", url: u, updated: ago(0.8), status: "mentioned you", statusTone: .warn, hostLabel: "git.7.solutions"),

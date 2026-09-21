@@ -22,10 +22,12 @@ struct GitHubHost: CodeHost {
 
     func inbox() async throws -> Inbox {
         async let r: Search = http.get(url(api, "search/issues", ["q": "is:pr is:open review-requested:@me archived:false", "per_page": "50", "sort": "updated"]))
+        async let ap: Search = http.get(url(api, "search/issues", ["q": "is:pr is:open reviewed-by:@me -author:@me -review-requested:@me archived:false", "per_page": "50", "sort": "updated"]))
         async let o: Search = config.showOwn ? http.get(url(api, "search/issues", ["q": "is:pr is:open author:@me archived:false", "per_page": "50", "sort": "updated"])) : Search(items: [])
         async let t: Search = config.showTodos ? http.get(url(api, "search/issues", ["q": "is:open mentions:@me -author:@me -review-requested:@me archived:false", "per_page": "30", "sort": "updated"])) : Search(items: [])
         var inbox = Inbox()
         inbox.reviews = try await r.items.map { item($0, kind: .reviewRequest) }
+        inbox.approved = try await ap.items.map { i in var w = item(i, kind: .reviewRequest); w.approvedByMe = true; w.status = "reviewed"; w.statusTone = .done; return w }
         inbox.own = try await o.items.map { item($0, kind: .ownMergeRequest) }
         inbox.todos = try await t.items.map { item($0, kind: .todo) }
         return inbox

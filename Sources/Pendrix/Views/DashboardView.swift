@@ -123,6 +123,13 @@ struct DashboardView: View {
                     ForEach(hub.visibleTodos) { i in ItemRow(item: i, isNew: hub.unseen.contains(i.id), open: { open(i) }, selected: hub.selectedID == i.id) }
                 }
             }
+            if (config.anyHostReady || hub.isDemo), hub.anyHostError == nil, !hub.visibleApproved.isEmpty {
+                SectionCard(title: "Approved by you · waiting to merge", count: hub.visibleApproved.count, empty: "") {
+                    grouped(hub.visibleApproved) { i in
+                        ItemRow(item: i, isNew: false, open: { open(i) }, links: hub.linkedJira(for: i), openLink: open, selected: hub.selectedID == i.id)
+                    }
+                }
+            }
             if config.anyHostReady || hub.isDemo, hub.anyHostError == nil {
                 SectionCard(title: "My merge requests", count: hub.visibleOwn.count, empty: "No open MRs") {
                     grouped(hub.visibleOwn) { i in

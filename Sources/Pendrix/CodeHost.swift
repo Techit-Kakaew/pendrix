@@ -39,6 +39,8 @@ struct ChangeRef: Hashable, Codable {
 
 struct Inbox {
     var reviews: [WorkItem] = []
+    /// Review requests you already approved (GitHub: reviewed). Out of the way, waiting on others.
+    var approved: [WorkItem] = []
     var own: [WorkItem] = []
     var todos: [WorkItem] = []
 }

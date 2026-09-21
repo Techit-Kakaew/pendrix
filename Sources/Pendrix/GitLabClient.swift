@@ -16,10 +16,18 @@ struct GitLabHost: CodeHost {
     func inbox() async throws -> Inbox {
         let me: User = try await http.get(api("user"))
         async let r: [MR] = http.get(api("merge_requests", ["scope": "all", "state": "opened", "reviewer_id": String(me.id), "per_page": "50"]))
+        async let ap: [MR] = http.get(api("merge_requests", ["scope": "all", "state": "opened", "reviewer_id": String(me.id), "approved_by_ids[]": String(me.id), "per_page": "50"]))
         async let o: [MR] = config.showOwn ? http.get(api("merge_requests", ["scope": "all", "state": "opened", "author_id": String(me.id), "per_page": "50"])) : []
         async let t: [Todo] = config.showTodos ? http.get(api("todos", ["state": "pending", "per_page": "50"])) : []
         var inbox = Inbox()
-        inbox.reviews = try await r.map { item($0, kind: .reviewRequest) }
+        let approvedIDs = Set(try await ap.map(\.id))
+        let all = try await r
+        inbox.reviews = all.filter { !approvedIDs.contains($0.id) }.map { item($0, kind: .reviewRequest) }
+        inbox.approved = all.filter { approvedIDs.contains($0.id) }.map { m in
+            var i = item(m, kind: .reviewRequest); i.approvedByMe = true
+            if m.detailed_merge_status != "mergeable" { i.status = "approved · " + (i.status ?? ""); i.statusTone = .done }
+            return i
+        }
         inbox.own = try await o.map { item($0, kind: .ownMergeRequest) }
         let reviewURLs = Set(inbox.reviews.map(\.url))
         inbox.todos = try await t.compactMap(todoItem).filter { !reviewURLs.contains($0.url) }

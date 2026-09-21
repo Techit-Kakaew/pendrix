@@ -29,6 +29,8 @@ Open Pendrix → Settings (⌘,).
 - **Jira Cloud**: site (`acme.atlassian.net`), email, API token from https://id.atlassian.com/manage-profile/security/api-tokens. JQL is editable; default is `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`.
 - **GitLab / GitHub**: any number of accounts. GitLab token: `api` (review actions) or `read_api` (inbox only). GitHub token: classic `repo`, or fine-grained with Pull requests read/write.
 
+Review requests you have already approved (GitHub: reviewed) move to "Approved by you · waiting to merge" and stop counting as waiting on you.
+
 ## Inbox filters, keyboard, overdue
 
 Filter (⌘F) or Settings → Inbox: hide drafts, hide bot authors, group by repo, only projects/repos matching a list. Keyboard: j / k or arrows move, Enter opens, `a` approves the selected review request (Touch ID). Review requests older than N hours (default 24) get a red "waiting" pill, turn the card red, count as "overdue" in the header and notify once.
