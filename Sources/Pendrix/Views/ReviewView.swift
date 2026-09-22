@@ -193,7 +193,7 @@ struct ReviewView: View {
             }
             .buttonStyle(.plain)
             if let viewed, let toggleViewed {
-                ViewedMark(on: viewed, toggle: toggleViewed).padding(.trailing, 8)
+                ViewedMark(on: viewed, toggle: toggleViewed).padding(.trailing, 3)
             } else {
                 Spacer().frame(width: 8)
             }
@@ -342,6 +342,8 @@ struct ViewedMark: View {
                 if on { Text("✓").font(.system(size: 9, weight: .bold)).foregroundStyle(WorkItem.Tone.done.color) }
             }
             .frame(width: 15, height: 15)
+            .padding(5)                      // bigger target; the stroke alone was the only hittable pixel
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
