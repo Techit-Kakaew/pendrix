@@ -168,30 +168,39 @@ struct ReviewView: View {
 
     private func fileRow(title: String, meta: String, selected: Bool, status: FileDiff.Status?, threads: Int = 0,
                          viewed: Bool? = nil, toggleViewed: (() -> Void)? = nil, _ tap: @escaping () -> Void) -> some View {
-        Button(action: tap) {
-            HStack(spacing: 8) {
-                if let s = status {
-                    Circle().fill(statusColor(s)).frame(width: 6, height: 6)
-                } else {
-                    Circle().fill(.clear).frame(width: 6, height: 6)
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        // The viewed toggle sits beside the row button, not inside it, so its tap isn't swallowed.
+        return HStack(spacing: 4) {
+            Button(action: tap) {
+                HStack(spacing: 8) {
+                    if let s = status {
+                        Circle().fill(statusColor(s)).frame(width: 6, height: 6)
+                    } else {
+                        Circle().fill(.clear).frame(width: 6, height: 6)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text((title as NSString).lastPathComponent).font(Type.title).fontWeight(selected ? .semibold : .regular).lineLimit(1)
+                        let dir = (title as NSString).deletingLastPathComponent
+                        if !dir.isEmpty { Text(dir).font(Type.meta).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head) }
+                    }
+                    Spacer(minLength: 4)
+                    if threads > 0 { Circle().fill(WorkItem.Tone.warn.color).frame(width: 5, height: 5) }
+                    Text(meta).font(Type.key).foregroundStyle(.tertiary)
                 }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text((title as NSString).lastPathComponent).font(Type.title).lineLimit(1)
-                    let dir = (title as NSString).deletingLastPathComponent
-                    if !dir.isEmpty { Text(dir).font(Type.meta).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head) }
-                }
-                Spacer(minLength: 4)
-                if threads > 0 { Circle().fill(WorkItem.Tone.warn.color).frame(width: 5, height: 5) }
-                Text(meta).font(Type.key).foregroundStyle(.tertiary)
-                if let viewed, let toggleViewed { ViewedMark(on: viewed, toggle: toggleViewed) }
+                .padding(.leading, 10).padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.primary.opacity(selected ? 0.10 : 0)))
-            .contentShape(Rectangle())
-            .opacity(viewed == true && !selected ? 0.55 : 1)
+            .buttonStyle(.plain)
+            if let viewed, let toggleViewed {
+                ViewedMark(on: viewed, toggle: toggleViewed).padding(.trailing, 8)
+            } else {
+                Spacer().frame(width: 8)
+            }
         }
-        .buttonStyle(.plain)
+        .background(shape.fill(selected ? WorkItem.Tone.active.color.opacity(0.16) : .clear))
+        .overlay(shape.strokeBorder(selected ? WorkItem.Tone.active.color.opacity(0.45) : .clear, lineWidth: 1))
+        .opacity(viewed == true && !selected ? 0.55 : 1)
     }
 
     private func statusColor(_ s: FileDiff.Status) -> Color {
