@@ -34,6 +34,9 @@ struct ReviewView: View {
             }
         }
         .task { if model.detail == nil { await model.load() } }
+        .background {
+            Button("") { model.toggleViewedAndAdvance() }.keyboardShortcut("v", modifiers: []).hidden()
+        }
     }
 
     // MARK: header
@@ -116,12 +119,19 @@ struct ReviewView: View {
                     .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 4)
                     Text(c.title).font(Type.meta).foregroundStyle(.secondary).lineLimit(2).padding(.horizontal, 12).padding(.bottom, 6)
                 }
-                Text("FILES · \(model.shownFiles.count)").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
-                    .padding(.horizontal, 12).padding(.top, model.commitMode ? 4 : 14).padding(.bottom, 4)
+                HStack(spacing: 6) {
+                    Text("FILES · \(model.shownFiles.count)").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
+                    if !model.commitMode, model.viewedCount > 0 {
+                        Text("· \(model.viewedCount) viewed").font(Type.section).foregroundStyle(model.viewedCount == d.files.count ? AnyShapeStyle(WorkItem.Tone.done.color) : AnyShapeStyle(.tertiary))
+                    }
+                }
+                .padding(.horizontal, 12).padding(.top, model.commitMode ? 4 : 14).padding(.bottom, 4)
                 ForEach(model.shownFiles) { f in
                     let unresolved = model.threads(for: f.path).filter { !$0.resolved }.count
                     fileRow(title: f.path, meta: "+\(f.additions) −\(f.deletions)", selected: model.selectedFile == f.path,
-                            status: f.status, threads: unresolved) { model.selectedFile = f.path }
+                            status: f.status, threads: unresolved,
+                            viewed: model.commitMode ? nil : model.isViewed(f),
+                            toggleViewed: { model.setViewed(f, !model.isViewed(f)) }) { model.selectedFile = f.path }
                 }
                 if !d.commits.isEmpty {
                     Text("COMMITS · \(d.commits.count)").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
@@ -156,7 +166,8 @@ struct ReviewView: View {
         .help(c.url?.absoluteString ?? c.id)
     }
 
-    private func fileRow(title: String, meta: String, selected: Bool, status: FileDiff.Status?, threads: Int = 0, _ tap: @escaping () -> Void) -> some View {
+    private func fileRow(title: String, meta: String, selected: Bool, status: FileDiff.Status?, threads: Int = 0,
+                         viewed: Bool? = nil, toggleViewed: (() -> Void)? = nil, _ tap: @escaping () -> Void) -> some View {
         Button(action: tap) {
             HStack(spacing: 8) {
                 if let s = status {
@@ -172,11 +183,13 @@ struct ReviewView: View {
                 Spacer(minLength: 4)
                 if threads > 0 { Circle().fill(WorkItem.Tone.warn.color).frame(width: 5, height: 5) }
                 Text(meta).font(Type.key).foregroundStyle(.tertiary)
+                if let viewed, let toggleViewed { ViewedMark(on: viewed, toggle: toggleViewed) }
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.primary.opacity(selected ? 0.10 : 0)))
             .contentShape(Rectangle())
+            .opacity(viewed == true && !selected ? 0.55 : 1)
         }
         .buttonStyle(.plain)
     }
@@ -303,5 +316,26 @@ struct ComposeBox: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+
+/// Hollow ring → filled ring with a check. Click to toggle; `v` does the same for the open file.
+struct ViewedMark: View {
+    let on: Bool
+    let toggle: () -> Void
+    @State private var hover = false
+    var body: some View {
+        Button(action: toggle) {
+            ZStack {
+                Circle().strokeBorder(on ? WorkItem.Tone.done.color : Color.secondary.opacity(hover ? 0.8 : 0.35), lineWidth: 1.2)
+                if on { Circle().fill(WorkItem.Tone.done.color.opacity(0.18)) }
+                if on { Text("✓").font(.system(size: 9, weight: .bold)).foregroundStyle(WorkItem.Tone.done.color) }
+            }
+            .frame(width: 15, height: 15)
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .help(on ? "Viewed — click to unmark" : "Mark as viewed (v)")
     }
 }

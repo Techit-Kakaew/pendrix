@@ -18,6 +18,12 @@ struct DiffView: View {
                 Spacer()
                 Text("+\(file.additions)").font(Type.key).foregroundStyle(WorkItem.Tone.done.color)
                 Text("−\(file.deletions)").font(Type.key).foregroundStyle(WorkItem.Tone.danger.color)
+                if !model.commitMode {
+                    Button(model.isViewed(file) ? "Viewed" : "Mark viewed") { model.toggleViewedAndAdvance() }
+                        .buttonStyle(.plain).font(Type.meta)
+                        .foregroundStyle(model.isViewed(file) ? AnyShapeStyle(WorkItem.Tone.done.color) : AnyShapeStyle(.secondary))
+                        .padding(.leading, 8).help("v")
+                }
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             Divider().opacity(0.4)

@@ -19,6 +19,28 @@ final class ReviewModel: ObservableObject {
     @Published var commitFiles: [FileDiff] = []
     @Published var commitLoading = false
     var commitMode: Bool { selectedCommit != nil }
+
+    // MARK: viewed files (local, per change)
+
+    @Published private(set) var viewed: Set<String> = []
+    private var viewedKey: String { "viewed.\(ref.hostID).\(ref.project).\(ref.number)" }
+    func loadViewed() { viewed = Set(UserDefaults.standard.stringArray(forKey: viewedKey) ?? []) }
+    func isViewed(_ f: FileDiff) -> Bool { viewed.contains(f.digest) }
+    func setViewed(_ f: FileDiff, _ on: Bool) {
+        if on { viewed.insert(f.digest) } else { viewed.remove(f.digest) }
+        // keep only digests that still exist so the set doesn't grow forever
+        let live = Set(detail?.files.map(\.digest) ?? [])
+        UserDefaults.standard.set(Array(viewed.intersection(live)), forKey: viewedKey)
+    }
+    /// Toggle the open file and step to the next unviewed one.
+    func toggleViewedAndAdvance() {
+        guard !commitMode, let f = file(selectedFile) else { return }
+        let now = !isViewed(f)
+        setViewed(f, now)
+        guard now, let files = detail?.files, let idx = files.firstIndex(where: { $0.path == f.path }) else { return }
+        if let next = (files[(idx + 1)...] + files[..<idx]).first(where: { !isViewed($0) }) { selectedFile = next.path }
+    }
+    var viewedCount: Int { detail?.files.filter(isViewed).count ?? 0 }
     var shownFiles: [FileDiff] { commitMode ? commitFiles : (detail?.files ?? []) }
 
     func showCommit(_ c: CommitInfo?) {
@@ -44,6 +66,7 @@ final class ReviewModel: ObservableObject {
     /// Demo instance for --snapshot.
     init(demo: ChangeDetail) {
         ref = demo.ref; host = nil; kind = .gitlab; detail = demo; selectedFile = demo.files.first?.path
+        viewed = [demo.files[1].digest]
     }
 
     func load() async {
@@ -52,6 +75,7 @@ final class ReviewModel: ObservableObject {
         do {
             let d = try await host.detail(ref)
             detail = d
+            loadViewed()
             if selectedFile == nil, d.threads.filter({ $0.anchor == nil }).isEmpty { selectedFile = d.files.first?.path }
             error = nil
         } catch { self.error = error.localizedDescription }

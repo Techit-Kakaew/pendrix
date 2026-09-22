@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 struct DiffLine: Identifiable, Hashable {
     enum Kind { case context, add, del, meta }
@@ -26,6 +27,12 @@ struct FileDiff: Identifiable, Hashable {
     let deletions: Int
     let binary: Bool
     var path: String { newPath }
+    /// Path + content digest. Viewed marks key on this, so a file that changes after a push comes back unviewed.
+    var digest: String {
+        let text = hunks.flatMap { $0.lines.map(\.text) }.joined(separator: "\n")
+        let h = SHA256.hash(data: Data(text.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
+        return "\(newPath)@\(h)"
+    }
 }
 
 /// Unified-diff body parser. GitLab `diff` and GitHub `patch` are both hunk-only (no ---/+++ header).
