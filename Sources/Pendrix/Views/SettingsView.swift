@@ -123,6 +123,7 @@ struct SettingsView: View {
                                     : "No Touch ID on this Mac; the account password is used.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Lock now") { Auth.lock(); unlocked = false }.controlSize(.small)
+                SecretStoreToggle()
                 HStack {
                     Button("Test connection") { Task { await hub.refresh() } }
                     if hub.refreshing { ProgressView().controlSize(.small) }
@@ -214,5 +215,20 @@ struct NotificationStatusRow: View {
     }
     private func openPane() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=dev.techit.pendrix")!)
+    }
+}
+
+
+/// Keychain (prompts once per rebuild/update on this signing setup) vs private file (no prompts, weaker).
+struct SecretStoreToggle: View {
+    @State private var file = Keychain.useFile
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Store tokens in a private file instead of Keychain", isOn: $file)
+                .onChange(of: file) { _, v in Keychain.useFile = v }
+            Text(file ? "~/Library/Application Support/Pendrix/secrets.json, readable only by your user. No Keychain prompts; anyone with your files can read it."
+                      : "Keychain: strongest protection, but macOS asks once after every rebuild or update because the app has no Apple Team ID.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
