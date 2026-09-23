@@ -76,4 +76,4 @@ Then `./build.sh` picks up "Pendrix Dev" automatically. If Keychain still asks a
 sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain scripts/pendrix-dev.crt
 ```
 
-All secrets sit in one Keychain item ("vault"), so at worst there is one prompt per rebuild, not one per token.
+All secrets sit in one Keychain item ("vault"), so at worst there is one prompt per rebuild, not one per token. Without an Apple Team ID the ACL pins to the binary hash, so that one prompt returns after every rebuild or update. Settings → Security → "Store tokens in a private file" switches to `~/Library/Application Support/Pendrix/secrets.json` (0600): no prompts, weaker at-rest protection. Touch ID gating is unaffected.
