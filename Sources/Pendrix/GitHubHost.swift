@@ -134,7 +134,8 @@ struct GitHubHost: CodeHost {
         return ChangeDetail(
             ref: ref, title: p.title, description: p.body ?? "", author: p.user?.login ?? "",
             sourceBranch: p.head.ref, targetBranch: p.base.ref, url: URL(string: p.html_url) ?? base,
-            state: p.mergeable_state ?? p.state, draft: p.draft ?? false,
+            state: p.state == "open" ? (p.mergeable_state ?? p.state) : (p.merged == true ? "merged" : p.state),
+            isOpen: p.state == "open", draft: p.draft ?? false,
             approvedByMe: latest[mev.login] == "APPROVED", approvals: approvers,
             mergeable: p.mergeable == true && p.mergeable_state == "clean",
             pipeline: nil, files: fileDiffs, threads: threads, commits: commits,
@@ -214,7 +215,7 @@ struct GitHubHost: CodeHost {
     private struct GHUser: Decodable { let login: String }
     private struct PR: Decodable {
         let title: String; let body: String?; let state: String; let html_url: String; let draft: Bool?
-        let mergeable: Bool?; let mergeable_state: String?; let user: GHUser?; let head: Ref; let base: Ref
+        let mergeable: Bool?; let mergeable_state: String?; let merged: Bool?; let user: GHUser?; let head: Ref; let base: Ref
     }
     private struct Ref: Decodable { let ref: String; let sha: String }
     private struct GHCommit: Decodable { let sha: String; let html_url: String; let commit: GHCommitBody; let author: GHUser? }

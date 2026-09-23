@@ -87,6 +87,8 @@ struct ChangeDetail {
     var targetBranch: String
     var url: URL
     var state: String
+    /// false once merged or closed: review actions are pointless and the hosts reject them (GitLab with a 401).
+    var isOpen: Bool = true
     var draft: Bool
     var approvedByMe: Bool
     var approvals: [String]

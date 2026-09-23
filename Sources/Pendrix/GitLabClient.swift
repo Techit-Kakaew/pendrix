@@ -158,7 +158,8 @@ struct GitLabHost: CodeHost {
         return ChangeDetail(
             ref: ref, title: mrv.title, description: mrv.description ?? "", author: mrv.author?.name ?? "",
             sourceBranch: mrv.source_branch, targetBranch: mrv.target_branch,
-            url: URL(string: mrv.web_url) ?? base, state: mrv.detailed_merge_status ?? mrv.state,
+            url: URL(string: mrv.web_url) ?? base, state: mrv.state == "opened" ? (mrv.detailed_merge_status ?? mrv.state) : mrv.state,
+            isOpen: mrv.state == "opened",
             draft: mrv.draft ?? false,
             approvedByMe: ap.approved_by?.contains { $0.user.id == mev.id } ?? false,
             approvals: approvers, mergeable: mrv.detailed_merge_status == "mergeable",
@@ -206,7 +207,13 @@ struct GitLabHost: CodeHost {
     }
 
     func approve(_ ref: ChangeRef, approve: Bool) async throws {
-        _ = try await http.send("POST", mr(ref, approve ? "/approve" : "/unapprove"))
+        do { _ = try await http.send("POST", mr(ref, approve ? "/approve" : "/unapprove")) }
+        catch let e as APIError where e.message.contains("HTTP 401") {
+            // GitLab answers 401 for "can't approve": already merged/closed, own MR, or approvals disabled.
+            let m: MRFull? = try? await http.get(mr(ref))
+            if let st = m?.state, st != "opened" { throw APIError(message: "MR is already \(st)") }
+            throw APIError(message: "GitLab refused the approval (own MR, approvals disabled, or token lacks `api` scope)")
+        }
     }
 
     func merge(_ ref: ChangeRef) async throws {

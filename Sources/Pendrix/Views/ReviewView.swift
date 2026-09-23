@@ -47,6 +47,7 @@ struct ReviewView: View {
                 BackButton()
                 Text(d.title).font(.system(size: 15, weight: .semibold)).lineLimit(2)
                 if d.draft { StatusPill(text: "draft", tone: .neutral) }
+                if !d.isOpen { StatusPill(text: d.state, tone: d.state == "merged" ? .done : .neutral) }
                 Spacer()
                 if let f = model.flash { Text(f).font(Type.meta).foregroundStyle(WorkItem.Tone.done.color).transition(.opacity) }
                 if model.busy { ProgressView().controlSize(.mini) }
@@ -70,14 +71,16 @@ struct ReviewView: View {
                     Text("\(model.unresolvedCount) unresolved").font(Type.meta).foregroundStyle(WorkItem.Tone.warn.color)
                 }
                 Spacer()
-                actionButton(d.approvedByMe ? "Unapprove" : "Approve", tone: d.approvedByMe ? nil : .done) {
-                    Task { await model.approve(!d.approvedByMe) }
+                if d.isOpen {
+                    actionButton(d.approvedByMe ? "Unapprove" : "Approve", tone: d.approvedByMe ? nil : .done) {
+                        Task { await model.approve(!d.approvedByMe) }
+                    }
+                    actionButton("Merge", tone: d.mergeable ? .active : nil) { confirmMerge = true }
+                        .disabled(!d.mergeable)
+                        .confirmationDialog("Merge into \(d.targetBranch)?", isPresented: $confirmMerge) {
+                            Button("Merge") { Task { await model.merge() } }
+                        } message: { Text(d.title) }
                 }
-                actionButton("Merge", tone: d.mergeable ? .active : nil) { confirmMerge = true }
-                    .disabled(!d.mergeable)
-                    .confirmationDialog("Merge into \(d.targetBranch)?", isPresented: $confirmMerge) {
-                        Button("Merge") { Task { await model.merge() } }
-                    } message: { Text(d.title) }
                 actionButton("Refresh") { Task { await model.load() } }.keyboardShortcut("r")
                 actionButton("Open in browser") { model.openInBrowser() }
             }
