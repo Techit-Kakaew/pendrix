@@ -1,66 +1,82 @@
 import Foundation
 import Security
 
-/// Minimal generic-password store. Tokens never touch UserDefaults.
+/// All secrets live in ONE generic-password item ("vault", JSON dict). One item = at most one
+/// permission prompt when the app's signature changes, instead of one per token.
 enum Keychain {
     private static let service = "dev.techit.pendrix"
-    private static let legacyService = "dev.techit.radar"   // pre-rename items are moved on first read
-
-    /// Bumped when the signing identity changes: items get re-created so their ACL names the current app only.
-    private static let aclGeneration = "acl-pendrix-dev-1"
+    private static let vaultAccount = "vault"
+    private static let legacyService = "dev.techit.radar"
+    private static let legacyAccounts = ["jiraToken", "anthropicKey"]
 
     /// Headless runs (--snapshot) never touch the keychain: an unsigned debug binary would trigger a permission dialog.
     nonisolated(unsafe) static var disabled = false
 
+    private static var cache: [String: String]?
+
     static func get(_ account: String) -> String? {
         if disabled { return nil }
-        if let v = get(account, service: service) { refreshACL(account, v); return v }
-        guard let old = get(account, service: legacyService) else { return nil }
-        set(old, for: account)
-        SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: legacyService,
-                       kSecAttrAccount as String: account] as CFDictionary)
-        return old
+        return vault()[account]
     }
 
-    /// Re-create the item once per generation so the ACL is owned by this signed build.
-    private static func refreshACL(_ account: String, _ value: String) {
-        let key = "\(aclGeneration).\(account)"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        set(value, for: account)
-        UserDefaults.standard.set(true, forKey: key)
+    static func set(_ value: String, for account: String) {
+        if disabled { return }
+        var v = vault()
+        if value.isEmpty { v.removeValue(forKey: account) } else { v[account] = value }
+        write(v)
     }
 
-    private static func get(_ account: String, service: String) -> String? {
+    static func accounts() -> [String] { disabled ? [] : Array(vault().keys) }
+
+    // MARK: vault
+
+    private static func vault() -> [String: String] {
+        if let c = cache { return c }
+        var v: [String: String] = [:]
+        if let data = read(account: vaultAccount, service: service),
+           let d = try? JSONSerialization.jsonObject(with: data) as? [String: String] { v = d }
+        if v.isEmpty { v = migrate(); if !v.isEmpty { write(v) } }
+        cache = v
+        return v
+    }
+
+    private static func write(_ v: [String: String]) {
+        cache = v
+        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                   kSecAttrService as String: service,
+                                   kSecAttrAccount as String: vaultAccount]
+        // Delete + add (not update) so the item's ACL is always the current app, never a stale build.
+        SecItemDelete(base as CFDictionary)
+        guard !v.isEmpty, let data = try? JSONSerialization.data(withJSONObject: v) else { return }
+        var add = base; add[kSecValueData as String] = data
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    /// One-time: gather the per-token items from 0.1/0.2 (both services) into the vault and delete them.
+    private static func migrate() -> [String: String] {
+        var out: [String: String] = [:]
+        for svc in [service, legacyService] {
+            for acct in listAccounts(service: svc) where acct != vaultAccount {
+                if let d = read(account: acct, service: svc), let s = String(data: d, encoding: .utf8), !s.isEmpty { out[acct] = s }
+                SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: svc,
+                               kSecAttrAccount as String: acct] as CFDictionary)
+            }
+        }
+        return out
+    }
+
+    private static func read(account: String, service: String) -> Data? {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                 kSecAttrService as String: service,
                                 kSecAttrAccount as String: account,
                                 kSecReturnData as String: true,
                                 kSecMatchLimit as String: kSecMatchLimitOne]
         var out: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess,
-              let d = out as? Data else { return nil }
-        return String(data: d, encoding: .utf8)
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess else { return nil }
+        return out as? Data
     }
 
-    static func set(_ value: String, for account: String) {
-        if disabled { return }
-        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                   kSecAttrService as String: service,
-                                   kSecAttrAccount as String: account]
-        // Delete + add (not update) so the item's ACL is always the current app, never a stale build.
-        SecItemDelete(base as CFDictionary)
-        if value.isEmpty { return }
-        var add = base; add[kSecValueData as String] = value.data(using: .utf8)!
-        SecItemAdd(add as CFDictionary, nil)
-    }
-}
-
-extension Keychain {
-    /// Every account stored under our service. Used to re-adopt tokens whose host row was lost.
-    static func accounts() -> [String] {
-        accounts(service: "dev.techit.pendrix") + accounts(service: "dev.techit.radar")
-    }
-    private static func accounts(service: String) -> [String] {
+    private static func listAccounts(service: String) -> [String] {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                 kSecAttrService as String: service,
                                 kSecReturnAttributes as String: true,
