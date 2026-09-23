@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import UserNotifications
 
 struct SettingsView: View {
     @EnvironmentObject var config: Config
@@ -90,6 +91,7 @@ struct SettingsView: View {
                     Text("1 min").tag(1); Text("2 min").tag(2); Text("5 min").tag(5); Text("10 min").tag(10)
                 }
                 Toggle("Notify on new items", isOn: $config.notify)
+                NotificationStatusRow()
             }
             if Features.standup { Section("Standup") {
                 Toggle("Remind me on weekdays", isOn: $config.standupReminder)
@@ -177,5 +179,40 @@ struct UpdateRow: View {
             case .relaunching: Text("Relaunching…").font(.caption)
             }
         }
+    }
+}
+
+
+/// Shows whether macOS lets Pendrix notify, with a jump to the system pane when it doesn't.
+struct NotificationStatusRow: View {
+    @State private var status: UNAuthorizationStatus = .notDetermined
+    var body: some View {
+        HStack(spacing: 10) {
+            switch status {
+            case .authorized, .provisional:
+                Text("macOS allows notifications").font(.caption).foregroundStyle(.secondary)
+                Button("Send test") { send() }.controlSize(.small)
+            case .denied:
+                Text("Blocked in System Settings — new review requests will not alert you.").font(.caption).foregroundStyle(.red)
+                Button("Open Notification Settings") { openPane() }.controlSize(.small)
+            default:
+                Text("Not asked yet").font(.caption).foregroundStyle(.secondary)
+                Button("Allow notifications") {
+                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in refresh() }
+                }.controlSize(.small)
+            }
+        }
+        .onAppear(perform: refresh)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
+    }
+    private func refresh() {
+        UNUserNotificationCenter.current().getNotificationSettings { s in DispatchQueue.main.async { status = s.authorizationStatus } }
+    }
+    private func send() {
+        let n = UNMutableNotificationContent(); n.title = "Pendrix"; n.body = "Notifications are working."; n.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "test", content: n, trigger: nil)) { _ in }
+    }
+    private func openPane() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=dev.techit.pendrix")!)
     }
 }

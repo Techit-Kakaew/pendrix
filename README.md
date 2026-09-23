@@ -70,4 +70,10 @@ Ad-hoc signatures change on every build, so macOS re-asks Keychain permission fo
 security add-trusted-cert -r trustRoot -p codeSign -k ~/Library/Keychains/login.keychain-db /path/to/pendrix-dev.crt
 ```
 
-Then `./build.sh` picks up "Pendrix Dev" automatically. First sign prompts once for key access → Always Allow.
+Then `./build.sh` picks up "Pendrix Dev" automatically. If Keychain still asks after every rebuild, the ACL is being pinned to the binary hash because the certificate is trusted only in the user domain — trust it system-wide once:
+
+```bash
+sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain scripts/pendrix-dev.crt
+```
+
+All secrets sit in one Keychain item ("vault"), so at worst there is one prompt per rebuild, not one per token.

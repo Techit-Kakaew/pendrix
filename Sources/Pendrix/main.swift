@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import UserNotifications
 
 /// Debug: render the dashboard or menu panel with demo data to a PNG. No credentials or window needed.
 ///   Pendrix --snapshot out.png            dashboard
@@ -35,4 +36,23 @@ if let i = CommandLine.arguments.firstIndex(of: "--snapshot"), i + 1 < CommandLi
     RunLoop.main.run()
 }
 
+if CommandLine.arguments.contains("--notify-test") {
+    // Run from the installed bundle: dist/Pendrix.app/Contents/MacOS/Pendrix --notify-test
+    import_notify_test()
+    RunLoop.main.run()
+}
+
 PendrixApp.main()
+
+func import_notify_test() {
+    Task { @MainActor in
+        let c = UNUserNotificationCenter.current()
+        let granted = try? await c.requestAuthorization(options: [.alert, .sound, .badge])
+        let st = await c.notificationSettings()
+        print("bundle: \(Bundle.main.bundleIdentifier ?? "none")  granted: \(granted ?? false)  auth: \(st.authorizationStatus.rawValue) (0 notDetermined 1 denied 2 authorized)  alerts: \(st.alertSetting.rawValue)")
+        let n = UNMutableNotificationContent(); n.title = "Pendrix test"; n.body = "Notifications work."; n.sound = .default
+        try? await c.add(UNNotificationRequest(identifier: "test", content: n, trigger: nil))
+        print("sent")
+        try? await Task.sleep(for: .seconds(1)); exit(0)
+    }
+}
