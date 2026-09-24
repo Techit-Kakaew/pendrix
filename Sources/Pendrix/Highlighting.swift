@@ -37,12 +37,32 @@ actor Highlighting {
         while i < code.count {
             let r = ns.range(of: "\n", range: NSRange(location: start, length: ns.length - start))
             let end = r.location == NSNotFound ? ns.length : r.location
-            out[code[i].id] = AttributedString(m.attributedSubstring(from: NSRange(location: start, length: end - start)))
+            var line = m.attributedSubstring(from: NSRange(location: start, length: end - start))
+            // JSX/TSX: once hljs is inside a tag it treats embedded JS as text. Lines that came back
+            // in a single colour get a second pass on their own, which recovers keywords/strings.
+            if Self.isMonochrome(line), !code[i].text.trimmingCharacters(in: .whitespaces).isEmpty,
+               let solo = h.highlight(code[i].text, as: lang), !Self.isMonochrome(solo) {
+                let mm = NSMutableAttributedString(attributedString: solo)
+                mm.removeAttribute(.backgroundColor, range: NSRange(location: 0, length: mm.length))
+                line = mm
+            }
+            out[code[i].id] = AttributedString(line)
             start = end + 1; i += 1
             if r.location == NSNotFound { break }
         }
         cache[key] = out
         return out
+    }
+
+    /// True when every run shares one foreground colour (i.e. hljs coloured nothing).
+    private static func isMonochrome(_ a: NSAttributedString) -> Bool {
+        var colors = Set<String>()
+        a.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: a.length)) { v, range, stop in
+            if a.attributedSubstring(from: range).string.trimmingCharacters(in: .whitespaces).isEmpty { return }
+            colors.insert((v as? NSColor)?.description ?? "none")
+            if colors.count > 1 { stop.pointee = true }
+        }
+        return colors.count <= 1
     }
 
     static func language(for path: String) -> String? {

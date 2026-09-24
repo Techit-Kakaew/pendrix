@@ -48,6 +48,13 @@ if let i = CommandLine.arguments.firstIndex(of: "--hl-test"), i + 1 < CommandLin
         let out = await Highlighting.shared.lines(for: f, dark: true)
         let total = hunks.flatMap(\.lines).count
         print("lang=\(Highlighting.language(for: path) ?? "nil") lines=\(total) colored=\(out.count) in \(Int(Date().timeIntervalSince(t0) * 1000))ms")
+        // per line: number of distinct foreground colours (1 = plain)
+        for l in hunks.flatMap(\.lines) where l.kind != .meta {
+            guard let a = out[l.id] else { continue }
+            var colors = Set<String>()
+            for run in a.runs { if let c = run.appKit.foregroundColor { colors.insert(c.description) } }
+            print(String(format: "%2d colours | %@", colors.count, l.text))
+        }
         exit(0)
     }
     RunLoop.main.run()
