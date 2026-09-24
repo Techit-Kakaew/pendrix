@@ -24,11 +24,25 @@ actor Highlighting {
     func lines(for file: FileDiff, dark isDark: Bool) -> [Int: AttributedString] {
         let key = "\(file.path)|\(file.hunks.count)|\(isDark)"
         if let c = cache[key] { return c }
-        guard let lang = Self.language(for: file.path), let h = engine(dark: isDark) else { return [:] }
         let code = file.hunks.flatMap { $0.lines.filter { $0.kind != .meta } }
-        guard !code.isEmpty, let attr = h.highlight(code.map(\.text).joined(separator: "\n"), as: lang) else { return [:] }
+        guard !code.isEmpty else { return [:] }
+        let joined = code.map(\.text).joined(separator: "\n")
+        // TS/TSX/JS/JSX: tree-sitter (exact, JSX-aware). Everything else: highlight.js.
+        let usingTreeSitter = TreeSitterHighlighter.supports(file.path)
+        var lang: String? = nil
+        var attr: NSAttributedString? = nil
+        if usingTreeSitter {
+            attr = TreeSitterHighlighter.highlight(joined, path: file.path, dark: isDark)
+        }
+        if attr == nil {
+            guard let l = Self.language(for: file.path), let h = engine(dark: isDark) else { return [:] }
+            lang = l; attr = h.highlight(joined, as: l)
+        }
+        guard let attr else { return [:] }
+        let h = engine(dark: isDark)
         let m = NSMutableAttributedString(attributedString: attr)
         m.removeAttribute(.backgroundColor, range: NSRange(location: 0, length: m.length))
+        m.removeAttribute(.font, range: NSRange(location: 0, length: m.length))   // the view sets the (zoomable) font
         // Split back into lines; attribute runs never cross a newline in hljs output.
         var out: [Int: AttributedString] = [:]
         var start = 0
@@ -40,10 +54,11 @@ actor Highlighting {
             var line = m.attributedSubstring(from: NSRange(location: start, length: end - start))
             // JSX/TSX: once hljs is inside a tag it treats embedded JS as text. Lines that came back
             // in a single colour get a second pass on their own, which recovers keywords/strings.
-            if Self.isMonochrome(line), !code[i].text.trimmingCharacters(in: .whitespaces).isEmpty,
+            if !usingTreeSitter, let lang, let h, Self.isMonochrome(line), !code[i].text.trimmingCharacters(in: .whitespaces).isEmpty,
                let solo = h.highlight(code[i].text, as: lang), !Self.isMonochrome(solo) {
                 let mm = NSMutableAttributedString(attributedString: solo)
                 mm.removeAttribute(.backgroundColor, range: NSRange(location: 0, length: mm.length))
+                mm.removeAttribute(.font, range: NSRange(location: 0, length: mm.length))
                 line = mm
             }
             out[code[i].id] = AttributedString(line)

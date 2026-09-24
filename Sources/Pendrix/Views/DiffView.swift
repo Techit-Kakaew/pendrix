@@ -9,7 +9,8 @@ struct DiffView: View {
     @FocusState private var searchFocused: Bool
     @Environment(\.colorScheme) private var scheme
 
-    private let mono = Font.system(size: 11.5, design: .monospaced)
+    @AppStorage("diffFontSize") private var fontSize: Double = 11.5
+    private var mono: Font { .system(size: fontSize, design: .monospaced) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -139,7 +140,7 @@ struct DiffView: View {
             Text(sign).font(mono).foregroundStyle(l.kind == .add ? WorkItem.Tone.done.color : l.kind == .del ? WorkItem.Tone.danger.color : .clear)
                 .frame(width: 12)
             Group {
-                if let c = colored[l.id] { Text(c) } else { Text(l.text.isEmpty ? " " : l.text).font(mono) }
+                if let c = colored[l.id] { Text(c).font(mono) } else { Text(l.text.isEmpty ? " " : l.text).font(mono) }
             }
             .textSelection(.enabled)
             .foregroundStyle(l.kind == .meta ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))

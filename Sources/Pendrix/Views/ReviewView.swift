@@ -42,6 +42,10 @@ struct ReviewView: View {
                 Button("") { if !ReviewModel.isTyping { model.selectFile(offset: 1) } }.keyboardShortcut("j", modifiers: [])
                 Button("") { if !ReviewModel.isTyping { model.selectFile(offset: -1) } }.keyboardShortcut("k", modifiers: [])
                 Button("") { model.searchFocusRequest += 1 }.keyboardShortcut("f", modifiers: .command)
+                Button("") { zoom(+1) }.keyboardShortcut("=", modifiers: .command)
+                Button("") { zoom(+1) }.keyboardShortcut("+", modifiers: .command)
+                Button("") { zoom(-1) }.keyboardShortcut("-", modifiers: .command)
+                Button("") { UserDefaults.standard.set(11.5, forKey: "diffFontSize") }.keyboardShortcut("0", modifiers: .command)
                 Button("") { if !ReviewModel.isTyping { model.stepMatch(1) } }.keyboardShortcut("n", modifiers: [])
                 Button("") { if !ReviewModel.isTyping { model.stepMatch(-1) } }.keyboardShortcut("n", modifiers: .shift)
             }
@@ -98,6 +102,12 @@ struct ReviewView: View {
             }
         }
         .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 12)
+    }
+
+    /// ⌘+ / ⌘- step the diff font between 9 and 22 pt; ⌘0 resets.
+    private func zoom(_ step: Double) {
+        let cur = UserDefaults.standard.object(forKey: "diffFontSize") as? Double ?? 11.5
+        UserDefaults.standard.set(min(22, max(9, cur + step)), forKey: "diffFontSize")
     }
 
     private func linkedJira(_ d: ChangeDetail) -> [WorkItem] {
