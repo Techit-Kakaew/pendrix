@@ -11,6 +11,7 @@ struct DiffView: View {
 
     @AppStorage("diffFontSize") private var fontSize: Double = 11.5
     private var mono: Font { .system(size: fontSize, design: .monospaced) }
+    private var zoomPercent: Int { Int((fontSize / 11.5 * 100).rounded()) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -18,6 +19,11 @@ struct DiffView: View {
                 Text(file.path).font(Type.key).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
                 if file.status == .renamed { Text("from \(file.oldPath)").font(Type.meta).foregroundStyle(.tertiary).lineLimit(1) }
                 Spacer()
+                if zoomPercent != 100 {
+                    Button("\(zoomPercent)%") { fontSize = 11.5 }
+                        .buttonStyle(.plain).font(Type.key).foregroundStyle(WorkItem.pendingColor)
+                        .help("Zoom — click or ⌘0 to reset to 100%")
+                }
                 searchBox
                 Text("+\(file.additions)").font(Type.key).foregroundStyle(WorkItem.Tone.done.color)
                 Text("−\(file.deletions)").font(Type.key).foregroundStyle(WorkItem.Tone.danger.color)
