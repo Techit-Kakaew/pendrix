@@ -27,6 +27,10 @@ final class Config: ObservableObject {
     @Published var groupByRepo: Bool { didSet { d.set(groupByRepo, forKey: "groupByRepo") } }
     /// Comma-separated substrings; an item stays only if its key/project matches one. Empty = everything.
     @Published var projectFilter: String { didSet { d.set(projectFilter, forKey: "projectFilter") } }
+    // AI review
+    /// Comma-separated folders scanned for local clones (deep review runs claude inside the repo).
+    @Published var repoRoots: String { didSet { d.set(repoRoots, forKey: "repoRoots") } }
+    @Published var deepReview: Bool { didSet { d.set(deepReview, forKey: "deepReview") } }
     // Updates
     @Published var autoUpdate: Bool { didSet { d.set(autoUpdate, forKey: "autoUpdate") } }
     /// GitHub "owner/repo" whose releases carry Pendrix-x.y.z.dmg + .dmg.sha256.
@@ -55,6 +59,8 @@ final class Config: ObservableObject {
         groupByRepo = d.object(forKey: "groupByRepo") as? Bool ?? false
         projectFilter = d.string(forKey: "projectFilter") ?? ""
         agingHours = d.object(forKey: "agingHours") as? Int ?? 24
+        repoRoots = d.string(forKey: "repoRoots") ?? "~/Desktop/works"
+        deepReview = d.object(forKey: "deepReview") as? Bool ?? true
         autoUpdate = d.object(forKey: "autoUpdate") as? Bool ?? true
         updateRepo = d.string(forKey: "updateRepo") ?? "Techit-Kakaew/pendrix"
         standupReminder = d.object(forKey: "standupReminder") as? Bool ?? false

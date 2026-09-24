@@ -60,6 +60,23 @@ if let i = CommandLine.arguments.firstIndex(of: "--hl-test"), i + 1 < CommandLin
     RunLoop.main.run()
 }
 
+if let i = CommandLine.arguments.firstIndex(of: "--deep-test"), i + 3 < CommandLine.arguments.count {
+    // Debug: Pendrix --deep-test <mr web url> <source branch> <target branch> — locator + worktree + claude with tools.
+    let url = URL(string: CommandLine.arguments[i + 1])!, src = CommandLine.arguments[i + 2], dst = CommandLine.arguments[i + 3]
+    Task { @MainActor in
+        RepoLocator.configuredRoots = Config.shared.repoRoots
+        print("indexed repos:", RepoLocator.indexedCount, "→ key:", RepoLocator.remoteKey(fromWebURL: url) ?? "-", "→", RepoLocator.locate(url) ?? "NOT FOUND")
+        guard let repo = RepoLocator.locate(url) else { exit(1) }
+        var d = Hub.demoDetail(); d.url = url; d.sourceBranch = src; d.targetBranch = dst; d.baseSHA = ""; d.headSHA = ""; d.files = []
+        do {
+            let r = try await AIReviewer.deepReview(d, repo: repo)
+            print("summary:", r.summary); for x in r.drafts { print("- [\(x.severity.rawValue)] \(x.path ?? "-"):\(x.anchor?.newLine ?? 0) \(x.title)") }
+        } catch { print("ERROR:", error.localizedDescription) }
+        exit(0)
+    }
+    RunLoop.main.run()
+}
+
 if CommandLine.arguments.contains("--ai-test") {
     // Debug: run the AI review pass on the demo change through the claude CLI and print the drafts.
     Task { @MainActor in

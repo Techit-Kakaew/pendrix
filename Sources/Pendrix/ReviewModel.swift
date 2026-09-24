@@ -27,6 +27,7 @@ final class ReviewModel: ObservableObject {
     @Published var aiSkipped: [String] = []
     @Published var aiRunning = false
     @Published var aiError: String?
+    @Published var aiMode: AIReviewer.Mode? = nil
     @Published var showDrafts = false          // sidebar "AI drafts" screen selected
     var pendingDrafts: [AIDraft] { aiDrafts.filter { !$0.posted } }
 
@@ -36,7 +37,7 @@ final class ReviewModel: ObservableObject {
         defer { aiRunning = false }
         do {
             let r = try await AIReviewer.review(d)
-            aiSummary = r.summary; aiDrafts = r.drafts; aiSkipped = r.skipped
+            aiSummary = r.summary; aiDrafts = r.drafts; aiSkipped = r.skipped; aiMode = r.mode
             showDrafts = true; selectedFile = nil
         } catch { aiError = error.localizedDescription }
     }

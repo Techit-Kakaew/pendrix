@@ -86,6 +86,12 @@ struct SettingsView: View {
                 }
                 Text("Overdue requests get a red pill, turn the card red, and notify once.").font(.caption).foregroundStyle(.secondary)
             }
+            Section("AI review") {
+                Toggle("Deep review when the repo is cloned locally", isOn: $config.deepReview)
+                TextField("Folders to scan for clones (comma-separated)", text: $config.repoRoots, prompt: Text("~/Desktop/works, ~/dev"))
+                Text("Deep review runs the claude CLI inside a temporary worktree of the repo with read-only tools (Read, Grep, Glob, git diff/log/show), so it can check callers and tests. Otherwise only the diff is sent. Nothing is posted without you.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Polling") {
                 Picker("Refresh every", selection: $config.pollMinutes) {
                     Text("1 min").tag(1); Text("2 min").tag(2); Text("5 min").tag(5); Text("10 min").tag(10)

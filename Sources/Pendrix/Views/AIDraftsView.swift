@@ -16,7 +16,7 @@ struct AIDraftsView: View {
                         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WorkItem.Tone.danger.color.opacity(0.08)))
                 }
                 if model.aiRunning {
-                    HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Claude is reading the diff… usually 30–90 s").font(Type.meta).foregroundStyle(.secondary) }
+                    HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Claude is reviewing… diff-only takes 30–90 s, deep review 2–6 min").font(Type.meta).foregroundStyle(.secondary) }
                 } else if !model.aiDrafts.isEmpty || !model.aiSummary.isEmpty {
                     summaryBlock
                     let groups = Dictionary(grouping: model.pendingDrafts, by: { $0.path ?? "" }).sorted { $0.key < $1.key }
@@ -41,7 +41,11 @@ struct AIDraftsView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("AI DRAFTS").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
-            Text("Suggestions from Claude. Edit freely; only Post sends anything.").font(Type.meta).foregroundStyle(.tertiary)
+            switch model.aiMode {
+            case .deep(let repo): Text("Deep review · \((repo as NSString).abbreviatingWithTildeInPath)").font(Type.meta).foregroundStyle(WorkItem.Tone.done.color)
+            case .diffOnly: Text("Diff-only · no local clone found under \(RepoLocator.configuredRoots)").font(Type.meta).foregroundStyle(.tertiary)
+            case nil: Text("Suggestions from Claude. Edit freely; only Post sends anything.").font(Type.meta).foregroundStyle(.tertiary)
+            }
             Spacer()
             Button(model.aiRunning ? "Running…" : "Run again") { Task { await model.runAIReview() } }
                 .buttonStyle(.plain).font(Type.meta).foregroundStyle(.secondary).disabled(model.aiRunning)

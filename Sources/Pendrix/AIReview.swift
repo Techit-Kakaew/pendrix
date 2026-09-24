@@ -29,12 +29,15 @@ enum ClaudeCLI {
     }
 
     /// Feeds `prompt` on stdin; returns the model's final text. Tools disabled, nothing persisted.
-    static func run(prompt: String, timeout: TimeInterval = 240) async throws -> String {
+    static func run(prompt: String, cwd: String? = nil, tools: [String] = [], allowed: [String] = [], timeout: TimeInterval = 240) async throws -> String {
         guard let exe = locate() else { throw APIError(message: "claude CLI not found — install Claude Code and run `claude` once to log in") }
         return try await withCheckedThrowingContinuation { cont in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: exe)
-            p.arguments = ["-p", "--output-format", "json", "--tools", "", "--no-session-persistence"]
+            var args = ["-p", "--output-format", "json", "--no-session-persistence", "--tools", tools.isEmpty ? "" : tools.joined(separator: ",")]
+            if !allowed.isEmpty { args += ["--allowedTools", allowed.joined(separator: ",")] }
+            p.arguments = args
+            if let cwd { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
             var env = ProcessInfo.processInfo.environment
             env["PATH"] = (env["PATH"] ?? "") + ":/usr/local/bin:/opt/homebrew/bin:\(FileManager.default.homeDirectoryForCurrentUser.path)/.local/bin"
             p.environment = env
@@ -71,7 +74,21 @@ enum ClaudeCLI {
 enum AIReviewer {
     static let maxDiffBytes = 180_000
 
-    static func review(_ d: ChangeDetail) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {
+    enum Mode: Equatable { case diffOnly, deep(repo: String) }
+
+    /// Deep when a local clone exists and the setting is on: a detached worktree at the MR head, claude with read-only tools.
+    static func review(_ d: ChangeDetail) async throws -> (summary: String, drafts: [AIDraft], skipped: [String], mode: Mode) {
+        let (deep, roots) = await MainActor.run { (Config.shared.deepReview, Config.shared.repoRoots) }
+        RepoLocator.configuredRoots = roots
+        if deep, let repo = RepoLocator.locate(d.url) {
+            let r = try await deepReview(d, repo: repo)
+            return (r.summary, r.drafts, r.skipped, .deep(repo: repo))
+        }
+        let r = try await diffReview(d)
+        return (r.summary, r.drafts, r.skipped, .diffOnly)
+    }
+
+    static func diffReview(_ d: ChangeDetail) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {
         var skipped: [String] = []
         var diffText = ""
         for f in d.files {
@@ -117,7 +134,68 @@ enum AIReviewer {
         """
         let raw = try await ClaudeCLI.run(prompt: prompt)
         let (summary, findings) = try parse(raw)
-        let drafts = findings.map { f -> AIDraft in
+        return (summary, map(findings, to: d), skipped)
+    }
+
+    // MARK: deep review inside the local clone
+
+    static func deepReview(_ d: ChangeDetail, repo: String) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {
+        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Pendrix/worktrees", isDirectory: true)
+        try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        let wt = cache.appendingPathComponent(String(d.headSHA.prefix(12))).path
+        // fetch both ends, then a detached worktree at head so nothing in the user's checkout moves
+        try git(repo, ["fetch", "--quiet", "origin", d.sourceBranch, d.targetBranch])
+        _ = try? git(repo, ["worktree", "remove", "--force", wt])
+        try git(repo, ["worktree", "add", "--detach", "--quiet", wt, d.headSHA.isEmpty ? "FETCH_HEAD" : d.headSHA])
+        defer { _ = try? git(repo, ["worktree", "remove", "--force", wt]); _ = try? git(repo, ["worktree", "prune"]) }
+
+        let base = d.baseSHA.isEmpty ? "origin/\(d.targetBranch)" : d.baseSHA
+        let existing = d.threads.flatMap(\.comments).map(\.body).joined(separator: "\n---\n")
+        let prompt = """
+        You are reviewing a merge request inside a checkout of the repository at its head commit. Work the way the /code-review skill does at high effort:
+        1. Run `git diff \(base) HEAD --stat` then `git diff \(base) HEAD` to see the change.
+        2. For anything that looks wrong, READ the surrounding code (whole file, callers via Grep, existing tests) before deciding. Report only findings you verified in the code; drop suspicions that the context resolves.
+        3. Look for: bugs, races, error handling, security, data loss, API/contract misuse, behaviour changes without tests, misleading names. Skip style a formatter handles.
+        Do not modify files. Do not run the project's build or tests.
+
+        Output ONLY a JSON object at the end, no prose around it, no markdown fences:
+        {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "severity": "blocker"|"suggestion"|"nit"|"question", "title": string, "body": string}]}
+        - "path" is the repo-relative path. "line" for side "new" is the line number in the HEAD version of the file; for side "old" it is the line number in the base version. Only reference lines that are part of the diff hunks.
+        - At most 12 findings, most important first. Empty findings if the change is fine; say so in summary.
+        - "body" is the comment as it should be posted: direct, specific, 1–4 sentences, concrete fix when possible, fenced code for code.
+        - Write in Thai if the MR title/description or existing comments are mostly Thai, otherwise English. Keep identifiers, paths and code verbatim.
+        - Do not repeat points already in existing comments.
+
+        MR: \(d.title)
+        Branch: \(d.sourceBranch) → \(d.targetBranch)   base: \(base)   head: HEAD
+        Description:
+        \(d.description.isEmpty ? "(none)" : d.description)
+
+        Existing comments:
+        \(existing.isEmpty ? "(none)" : existing)
+        """
+        let raw = try await ClaudeCLI.run(prompt: prompt, cwd: wt,
+                                          tools: ["Read", "Grep", "Glob", "Bash"],
+                                          allowed: ["Read", "Grep", "Glob", "Bash(git diff *)", "Bash(git log *)", "Bash(git show *)", "Bash(git blame *)"],
+                                          timeout: 600)
+        let (summary, findings) = try parse(raw)
+        return (summary, map(findings, to: d), [])
+    }
+
+    @discardableResult
+    static func git(_ repo: String, _ args: [String]) throws -> String {
+        let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/git"); p.arguments = ["-C", repo] + args
+        let out = Pipe(), err = Pipe(); p.standardOutput = out; p.standardError = err
+        try p.run(); p.waitUntilExit()
+        let o = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        guard p.terminationStatus == 0 else {
+            throw APIError(message: "git \(args.first ?? "") failed: \(String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))")
+        }
+        return o
+    }
+
+    private static func map(_ findings: [Finding], to d: ChangeDetail) -> [AIDraft] {
+        findings.map { f -> AIDraft in
             var anchor: LineAnchor? = nil
             if let file = d.files.first(where: { $0.path == f.path || $0.path.hasSuffix(f.path) }) {
                 let lines = file.hunks.flatMap(\.lines)
@@ -132,7 +210,6 @@ enum AIReviewer {
             }
             return AIDraft(path: f.path, anchor: nil, severity: AIDraft.Severity(rawValue: f.severity) ?? .suggestion, title: f.title, body: f.body)
         }
-        return (summary, drafts, skipped)
     }
 
     private struct Finding: Decodable { let path: String; let line: Int; let side: String?; let severity: String; let title: String; let body: String }
