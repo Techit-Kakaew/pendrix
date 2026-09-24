@@ -36,6 +36,23 @@ if let i = CommandLine.arguments.firstIndex(of: "--snapshot"), i + 1 < CommandLi
     RunLoop.main.run()
 }
 
+if let i = CommandLine.arguments.firstIndex(of: "--hl-test"), i + 1 < CommandLine.arguments.count {
+    // Debug: Pendrix --hl-test path/to/file → how many lines got colour, per detected language.
+    let path = CommandLine.arguments[i + 1]
+    let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+    let patch = "@@ -1,\(text.split(separator: "\n").count) +1,\(text.split(separator: "\n").count) @@\n" + text.split(separator: "\n", omittingEmptySubsequences: false).map { " " + $0 }.joined(separator: "\n")
+    let hunks = DiffParser.parse(patch)
+    let f = FileDiff(oldPath: path, newPath: path, status: .modified, hunks: hunks, additions: 0, deletions: 0, binary: false)
+    Task {
+        let t0 = Date()
+        let out = await Highlighting.shared.lines(for: f, dark: true)
+        let total = hunks.flatMap(\.lines).count
+        print("lang=\(Highlighting.language(for: path) ?? "nil") lines=\(total) colored=\(out.count) in \(Int(Date().timeIntervalSince(t0) * 1000))ms")
+        exit(0)
+    }
+    RunLoop.main.run()
+}
+
 if CommandLine.arguments.contains("--notify-test") {
     // Run from the installed bundle: dist/Pendrix.app/Contents/MacOS/Pendrix --notify-test
     import_notify_test()
