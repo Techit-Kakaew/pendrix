@@ -52,9 +52,11 @@ struct DiffView: View {
                             ForEach(h.lines) { l in
                                 row(l)
                                 let ts = model.threads(at: l, in: file.path)
-                                if !ts.isEmpty || model.composing == anchor(l) {
+                                let ds = model.commitMode ? [] : model.drafts(at: l, in: file.path)
+                                if !ts.isEmpty || !ds.isEmpty || model.composing == anchor(l) {
                                     VStack(spacing: 8) {
                                         ForEach(ts) { t in ThreadView(thread: t, model: model) }
+                                        ForEach(ds) { dft in DraftCard(draft: dft, model: model) }
                                         if model.composing == anchor(l) {
                                             ComposeBox(text: $draft, placeholder: "Comment on line \(l.newNo ?? l.oldNo ?? 0)…", submit: "Comment") {
                                                 Task { await model.comment(draft, at: anchor(l)); draft = "" }

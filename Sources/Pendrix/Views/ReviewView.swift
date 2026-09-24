@@ -97,6 +97,13 @@ struct ReviewView: View {
                             Button("Merge") { Task { await model.merge() } }
                         } message: { Text(d.title) }
                 }
+                if d.isOpen {
+                    actionButton(model.aiRunning ? "Reviewing…" : "AI review", tone: model.pendingDrafts.isEmpty ? nil : .warn) {
+                        if model.pendingDrafts.isEmpty { Task { await model.runAIReview() } } else { model.showDrafts = true; model.selectedFile = nil }
+                    }
+                    .disabled(model.aiRunning)
+                    .help("Ask Claude (via the claude CLI) for review comments. Nothing is posted until you press Post.")
+                }
                 actionButton("Refresh") { Task { await model.load() } }.keyboardShortcut("r")
                 actionButton("Open in browser") { model.openInBrowser() }
             }
@@ -131,8 +138,13 @@ struct ReviewView: View {
     private func fileList(_ d: ChangeDetail) -> some View {
         Scrolling {
             VStack(alignment: .leading, spacing: 2) {
-                fileRow(title: "Conversation", meta: "\(model.threads(for: nil).count)", selected: model.selectedFile == nil, status: nil) {
-                    model.selectedFile = nil
+                fileRow(title: "Conversation", meta: "\(model.threads(for: nil).count)", selected: model.selectedFile == nil && !model.showDrafts, status: nil) {
+                    model.selectedFile = nil; model.showDrafts = false
+                }
+                if !model.aiDrafts.isEmpty || model.aiRunning || model.aiError != nil {
+                    fileRow(title: "AI drafts", meta: model.aiRunning ? "…" : "\(model.pendingDrafts.count)", selected: model.showDrafts, status: nil) {
+                        model.selectedFile = nil; model.showDrafts = true
+                    }
                 }
                 if let c = model.selectedCommit {
                     HStack(spacing: 6) {
@@ -154,10 +166,11 @@ struct ReviewView: View {
                 ForEach(model.shownFiles) { f in
                     let unresolved = model.threads(for: f.path).filter { !$0.resolved }.count
                     let hits = model.matchCount(in: f)
-                    fileRow(title: f.path, meta: hits > 0 ? "\(hits) hits" : "+\(f.additions) −\(f.deletions)", selected: model.selectedFile == f.path,
+                    let drafts = model.draftCount(in: f.path)
+                    fileRow(title: f.path, meta: hits > 0 ? "\(hits) hits" : drafts > 0 ? "\(drafts) drafts" : "+\(f.additions) −\(f.deletions)", selected: model.selectedFile == f.path,
                             status: f.status, threads: unresolved,
                             viewed: model.commitMode ? nil : model.isViewed(f),
-                            toggleViewed: { model.setViewed(f, !model.isViewed(f)) }) { model.selectedFile = f.path }
+                            toggleViewed: { model.setViewed(f, !model.isViewed(f)) }) { model.selectedFile = f.path; model.showDrafts = false }
                 }
                 if !d.commits.isEmpty {
                     Text("COMMITS · \(d.commits.count)").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
@@ -242,7 +255,10 @@ struct ReviewView: View {
 
     @ViewBuilder
     private func content(_ d: ChangeDetail) -> some View {
-        if let f = model.file(model.selectedFile) {
+        if model.showDrafts {
+            AIDraftsView(model: model)
+                .glass(radius: 14).padding(.horizontal, 18).padding(.bottom, 18)
+        } else if let f = model.file(model.selectedFile) {
             DiffView(file: f, model: model)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .glass(radius: 14).padding(.horizontal, 18).padding(.bottom, 18)

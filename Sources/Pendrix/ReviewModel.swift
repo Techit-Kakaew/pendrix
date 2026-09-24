@@ -20,6 +20,59 @@ final class ReviewModel: ObservableObject {
     @Published var commitLoading = false
     var commitMode: Bool { selectedCommit != nil }
 
+    // MARK: AI review drafts (local until posted)
+
+    @Published var aiDrafts: [AIDraft] = []
+    @Published var aiSummary: String = ""
+    @Published var aiSkipped: [String] = []
+    @Published var aiRunning = false
+    @Published var aiError: String?
+    @Published var showDrafts = false          // sidebar "AI drafts" screen selected
+    var pendingDrafts: [AIDraft] { aiDrafts.filter { !$0.posted } }
+
+    func runAIReview() async {
+        guard let d = detail, !aiRunning else { return }
+        aiRunning = true; aiError = nil
+        defer { aiRunning = false }
+        do {
+            let r = try await AIReviewer.review(d)
+            aiSummary = r.summary; aiDrafts = r.drafts; aiSkipped = r.skipped
+            showDrafts = true; selectedFile = nil
+        } catch { aiError = error.localizedDescription }
+    }
+    func drafts(at line: DiffLine, in path: String) -> [AIDraft] {
+        pendingDrafts.filter { dft in
+            guard let a = dft.anchor, a.path == path else { return false }
+            if let n = line.newNo, a.newLine == n { return true }
+            if line.kind == .del, let o = line.oldNo, a.oldLine == o, a.newLine == nil { return true }
+            return false
+        }
+    }
+    func draftCount(in path: String) -> Int { pendingDrafts.filter { $0.path == path }.count }
+    func update(_ draft: AIDraft, body: String) {
+        if let i = aiDrafts.firstIndex(where: { $0.id == draft.id }) { aiDrafts[i].body = body }
+    }
+    func dismiss(_ draft: AIDraft) { aiDrafts.removeAll { $0.id == draft.id } }
+    /// Posts one draft as a real comment (anchored when the line resolved, otherwise on the conversation with a path prefix).
+    func post(_ draft: AIDraft) async {
+        guard let host, let d = detail else { return }
+        let body = draft.anchor != nil ? draft.display : "`\(draft.path ?? "")`\n\n\(draft.display)"
+        guard await Auth.require("Pendrix: post comment on \(d.title)") else { return }
+        busy = true
+        do {
+            try await host.comment(ref, at: draft.anchor, body: body, detail: d)
+            if let i = aiDrafts.firstIndex(where: { $0.id == draft.id }) { aiDrafts[i].posted = true }
+            flash = "Comment posted"; error = nil
+            await load()
+        } catch { self.error = error.localizedDescription }
+        busy = false
+        Task { try? await Task.sleep(for: .seconds(2)); if flash == "Comment posted" { flash = nil } }
+    }
+    func jump(to draft: AIDraft) {
+        showDrafts = false
+        selectedFile = draft.path
+    }
+
     // MARK: search (current file) + file stepping
 
     @Published var query = ""
@@ -42,6 +95,7 @@ final class ReviewModel: ObservableObject {
         matchIndex = ((matchIndex + delta) % n + n) % n
     }
     func selectFile(offset: Int) {
+        showDrafts = false
         let files = shownFiles; guard !files.isEmpty else { return }
         let idx = files.firstIndex { $0.path == selectedFile } ?? (offset > 0 ? -1 : files.count)
         selectedFile = files[max(0, min(files.count - 1, idx + offset))].path

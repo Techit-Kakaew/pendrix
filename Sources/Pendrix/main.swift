@@ -60,6 +60,20 @@ if let i = CommandLine.arguments.firstIndex(of: "--hl-test"), i + 1 < CommandLin
     RunLoop.main.run()
 }
 
+if CommandLine.arguments.contains("--ai-test") {
+    // Debug: run the AI review pass on the demo change through the claude CLI and print the drafts.
+    Task { @MainActor in
+        do {
+            let r = try await AIReviewer.review(Hub.demoDetail())
+            print("summary:", r.summary)
+            for d in r.drafts { print("- [\(d.severity.rawValue)] \(d.path ?? "-"):\(d.anchor?.newLine ?? d.anchor?.oldLine ?? 0) \(d.title)\n    \(d.body.prefix(160))") }
+            print("skipped:", r.skipped)
+        } catch { print("ERROR:", error.localizedDescription) }
+        exit(0)
+    }
+    RunLoop.main.run()
+}
+
 if CommandLine.arguments.contains("--notify-test") {
     // Run from the installed bundle: dist/Pendrix.app/Contents/MacOS/Pendrix --notify-test
     import_notify_test()
