@@ -35,6 +35,10 @@ Review requests you have already approved (GitHub: reviewed) move to "Approved b
 
 Filter (⌘F) or Settings → Inbox: hide drafts, hide bot authors, group by repo, only projects/repos matching a list. Keyboard: j / k or arrows move, Enter opens, `a` approves the selected review request (Touch ID). Review requests older than N hours (default 24) get a red "waiting" pill, turn the card red, count as "overdue" in the header and notify once.
 
+## AI review (drafts only)
+
+"AI review" in the review header runs the Claude Code CLI (`claude -p`, tools disabled, nothing persisted) on the MR diff using your existing Claude login — no API key. Findings come back as drafts: under their lines in the diff and in an "AI drafts" worklist with the summary. Edit, Post (Touch ID), or Dismiss each one; nothing is sent until you press Post. Generated/lock files and very large files are skipped. Comment language follows the MR (Thai if the MR is in Thai).
+
 ## Jira from the app
 
 Right-click a Jira row: move to any available status, comment, assign to me. MRs/PRs whose title or branch mention a Jira key (PAY-412) show that issue as a chip, and the issue shows its MRs.
