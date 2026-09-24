@@ -142,11 +142,16 @@ enum AIReviewer {
     static func deepReview(_ d: ChangeDetail, repo: String) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {
         let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Pendrix/worktrees", isDirectory: true)
         try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        let wt = cache.appendingPathComponent(String(d.headSHA.prefix(12))).path
-        // fetch both ends, then a detached worktree at head so nothing in the user's checkout moves
+        // unique dir per run so concurrent reviews can't collide; prune leftovers from runs the app didn't finish
+        let wt = cache.appendingPathComponent("\(d.headSHA.prefix(8))-\(UUID().uuidString.prefix(6))").path
+        _ = try? git(repo, ["worktree", "prune"])
+        for stale in (try? FileManager.default.contentsOfDirectory(atPath: cache.path)) ?? [] {
+            _ = try? git(repo, ["worktree", "remove", "--force", cache.appendingPathComponent(stale).path])
+        }
+        // fetch both ends (updates origin/<branch>), then a detached worktree at head so the user's checkout never moves
         try git(repo, ["fetch", "--quiet", "origin", d.sourceBranch, d.targetBranch])
-        _ = try? git(repo, ["worktree", "remove", "--force", wt])
-        try git(repo, ["worktree", "add", "--detach", "--quiet", wt, d.headSHA.isEmpty ? "FETCH_HEAD" : d.headSHA])
+        let head = d.headSHA.isEmpty ? "origin/\(d.sourceBranch)" : d.headSHA
+        try git(repo, ["worktree", "add", "--detach", "--quiet", wt, head])
         defer { _ = try? git(repo, ["worktree", "remove", "--force", wt]); _ = try? git(repo, ["worktree", "prune"]) }
 
         let base = d.baseSHA.isEmpty ? "origin/\(d.targetBranch)" : d.baseSHA
@@ -176,15 +181,17 @@ enum AIReviewer {
         """
         let raw = try await ClaudeCLI.run(prompt: prompt, cwd: wt,
                                           tools: ["Read", "Grep", "Glob", "Bash"],
-                                          allowed: ["Read", "Grep", "Glob", "Bash(git diff *)", "Bash(git log *)", "Bash(git show *)", "Bash(git blame *)"],
+                                          allowed: ["Read", "Grep", "Glob", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git blame:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(wc:*)"],
                                           timeout: 600)
         let (summary, findings) = try parse(raw)
         return (summary, map(findings, to: d), [])
     }
 
+    static let gitPath: String = ["/usr/bin/git", "/opt/homebrew/bin/git", "/usr/local/bin/git"].first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/git"
+
     @discardableResult
     static func git(_ repo: String, _ args: [String]) throws -> String {
-        let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/git"); p.arguments = ["-C", repo] + args
+        let p = Process(); p.executableURL = URL(fileURLWithPath: gitPath); p.arguments = ["-C", repo] + args
         let out = Pipe(), err = Pipe(); p.standardOutput = out; p.standardError = err
         try p.run(); p.waitUntilExit()
         let o = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
