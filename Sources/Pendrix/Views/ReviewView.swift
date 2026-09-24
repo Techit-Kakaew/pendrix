@@ -35,8 +35,20 @@ struct ReviewView: View {
         }
         .task { if model.detail == nil { await model.load() } }
         .background {
-            Button("") { model.toggleViewedAndAdvance() }.keyboardShortcut("v", modifiers: []).hidden()
+            Group {
+                Button("") { model.toggleViewedAndAdvance() }.keyboardShortcut("v", modifiers: [])
+                Button("") { if !ReviewModel.isTyping { model.selectFile(offset: 1) } }.keyboardShortcut(.downArrow, modifiers: [])
+                Button("") { if !ReviewModel.isTyping { model.selectFile(offset: -1) } }.keyboardShortcut(.upArrow, modifiers: [])
+                Button("") { if !ReviewModel.isTyping { model.selectFile(offset: 1) } }.keyboardShortcut("j", modifiers: [])
+                Button("") { if !ReviewModel.isTyping { model.selectFile(offset: -1) } }.keyboardShortcut("k", modifiers: [])
+                Button("") { model.searchFocusRequest += 1 }.keyboardShortcut("f", modifiers: .command)
+                Button("") { if !ReviewModel.isTyping { model.stepMatch(1) } }.keyboardShortcut("n", modifiers: [])
+                Button("") { if !ReviewModel.isTyping { model.stepMatch(-1) } }.keyboardShortcut("n", modifiers: .shift)
+            }
+            .hidden()
         }
+        .onChange(of: model.searchActive) { _, on in hub.escapeOwnedBySubview = on }
+        .onDisappear { hub.escapeOwnedBySubview = false }
     }
 
     // MARK: header
@@ -131,7 +143,8 @@ struct ReviewView: View {
                 .padding(.horizontal, 12).padding(.top, model.commitMode ? 4 : 14).padding(.bottom, 4)
                 ForEach(model.shownFiles) { f in
                     let unresolved = model.threads(for: f.path).filter { !$0.resolved }.count
-                    fileRow(title: f.path, meta: "+\(f.additions) −\(f.deletions)", selected: model.selectedFile == f.path,
+                    let hits = model.matchCount(in: f)
+                    fileRow(title: f.path, meta: hits > 0 ? "\(hits) hits" : "+\(f.additions) −\(f.deletions)", selected: model.selectedFile == f.path,
                             status: f.status, threads: unresolved,
                             viewed: model.commitMode ? nil : model.isViewed(f),
                             toggleViewed: { model.setViewed(f, !model.isViewed(f)) }) { model.selectedFile = f.path }

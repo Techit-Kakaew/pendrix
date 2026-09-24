@@ -23,7 +23,7 @@ struct RootView: View {
         .background { WindowBackdrop() }
         .background {
             // Esc goes home from any sub-screen.
-            Button("") { if hub.route != .home { hub.back() } }.keyboardShortcut(.escape, modifiers: []).hidden()
+            Button("") { if hub.route != .home, !hub.escapeOwnedBySubview { hub.back() } }.keyboardShortcut(.escape, modifiers: []).hidden()
         }
         .onAppear {
             hub.requestNotificationPermission()

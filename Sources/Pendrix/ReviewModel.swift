@@ -20,6 +20,40 @@ final class ReviewModel: ObservableObject {
     @Published var commitLoading = false
     var commitMode: Bool { selectedCommit != nil }
 
+    // MARK: search (current file) + file stepping
+
+    @Published var query = ""
+    @Published var matchIndex = 0
+    @Published var searchFocusRequest = 0     // bump to focus the search field
+    var searchActive: Bool { !query.isEmpty }
+
+    func matches(in f: FileDiff) -> [Int] {
+        guard !query.isEmpty else { return [] }
+        return f.hunks.flatMap(\.lines).filter { $0.kind != .meta && $0.text.localizedCaseInsensitiveContains(query) }.map(\.id)
+    }
+    func matchCount(in f: FileDiff) -> Int {
+        guard !query.isEmpty else { return 0 }
+        return f.hunks.flatMap(\.lines).reduce(0) { $0 + (($1.kind != .meta && $1.text.localizedCaseInsensitiveContains(query)) ? 1 : 0) }
+    }
+    /// Step through matches in the open file; wraps.
+    func stepMatch(_ delta: Int) {
+        guard let f = file(selectedFile) else { return }
+        let n = matches(in: f).count; guard n > 0 else { return }
+        matchIndex = ((matchIndex + delta) % n + n) % n
+    }
+    func selectFile(offset: Int) {
+        let files = shownFiles; guard !files.isEmpty else { return }
+        let idx = files.firstIndex { $0.path == selectedFile } ?? (offset > 0 ? -1 : files.count)
+        selectedFile = files[max(0, min(files.count - 1, idx + offset))].path
+        matchIndex = 0
+    }
+
+    /// True while a text field/view has keyboard focus, so single-key shortcuts stay out of the way of typing.
+    static var isTyping: Bool {
+        guard let r = NSApp.keyWindow?.firstResponder else { return false }
+        return r is NSTextView || r is NSTextField
+    }
+
     // MARK: viewed files (local, per change)
 
     @Published private(set) var viewed: Set<String> = []
@@ -34,7 +68,7 @@ final class ReviewModel: ObservableObject {
     }
     /// Toggle the open file and step to the next unviewed one.
     func toggleViewedAndAdvance() {
-        guard !commitMode, let f = file(selectedFile) else { return }
+        guard !Self.isTyping, !commitMode, let f = file(selectedFile) else { return }
         let now = !isViewed(f)
         setViewed(f, now)
         guard now, let files = detail?.files, let idx = files.firstIndex(where: { $0.path == f.path }) else { return }

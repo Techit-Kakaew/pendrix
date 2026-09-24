@@ -6,6 +6,7 @@ struct DiffView: View {
     @ObservedObject var model: ReviewModel
     @State private var draft = ""
     @State private var colored: [Int: AttributedString] = [:]
+    @FocusState private var searchFocused: Bool
     @Environment(\.colorScheme) private var scheme
 
     private let mono = Font.system(size: 11.5, design: .monospaced)
@@ -16,6 +17,7 @@ struct DiffView: View {
                 Text(file.path).font(Type.key).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
                 if file.status == .renamed { Text("from \(file.oldPath)").font(Type.meta).foregroundStyle(.tertiary).lineLimit(1) }
                 Spacer()
+                searchBox
                 Text("+\(file.additions)").font(Type.key).foregroundStyle(WorkItem.Tone.done.color)
                 Text("−\(file.deletions)").font(Type.key).foregroundStyle(WorkItem.Tone.danger.color)
                 if !model.commitMode {
@@ -32,6 +34,7 @@ struct DiffView: View {
                 Spacer()
             } else {
                 GeometryReader { geo in
+                ScrollViewReader { proxy in
                 Scrolling(axes: [.vertical, .horizontal], indicators: true) {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(file.hunks) { h in
@@ -62,6 +65,9 @@ struct DiffView: View {
                     .padding(.bottom, 12)
                     .frame(minWidth: geo.size.width, minHeight: geo.size.height, alignment: .topLeading)
                 }
+                .onChange(of: model.matchIndex) { _, _ in scrollToMatch(proxy) }
+                .onChange(of: model.query) { _, _ in model.matchIndex = 0; scrollToMatch(proxy) }
+                }
                 }
             }
         }
@@ -69,6 +75,36 @@ struct DiffView: View {
             colored = [:]
             colored = await Highlighting.shared.lines(for: file, dark: scheme == .dark)
         }
+    }
+
+    private var currentMatches: [Int] { model.matches(in: file) }
+
+    private func scrollToMatch(_ proxy: ScrollViewProxy) {
+        let m = currentMatches
+        guard !m.isEmpty else { return }
+        withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo(m[min(model.matchIndex, m.count - 1)], anchor: .center) }
+    }
+
+    /// ⌘F focuses; Enter next, ⇧Enter previous, Esc clears.
+    private var searchBox: some View {
+        HStack(spacing: 6) {
+            TextField("Find in file", text: $model.query)
+                .textFieldStyle(.plain).font(Type.meta).frame(width: model.searchActive || searchFocused ? 180 : 110)
+                .focused($searchFocused)
+                .onSubmit { model.stepMatch(1) }
+                .onExitCommand { model.query = ""; searchFocused = false }
+                .onChange(of: model.searchFocusRequest) { _, _ in searchFocused = true }
+            if model.searchActive {
+                let m = currentMatches
+                Text(m.isEmpty ? "0" : "\(min(model.matchIndex, m.count - 1) + 1)/\(m.count)")
+                    .font(Type.key).foregroundStyle(m.isEmpty ? AnyShapeStyle(WorkItem.Tone.danger.color) : AnyShapeStyle(.secondary)).monospacedDigit()
+                Button("‹") { model.stepMatch(-1) }.buttonStyle(.plain).foregroundStyle(.secondary).keyboardShortcut(.return, modifiers: .shift)
+                Button("›") { model.stepMatch(1) }.buttonStyle(.plain).foregroundStyle(.secondary)
+                Button("×") { model.query = ""; searchFocused = false }.buttonStyle(.plain).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(Capsule().fill(.primary.opacity(searchFocused || model.searchActive ? 0.08 : 0.04)))
     }
 
     private func anchor(_ l: DiffLine) -> LineAnchor {
@@ -82,6 +118,9 @@ struct DiffView: View {
         default: .clear
         }
         let sign = l.kind == .add ? "+" : l.kind == .del ? "−" : " "
+        let m = currentMatches
+        let isHit = !m.isEmpty && m.contains(l.id)
+        let isCurrent = isHit && m[min(model.matchIndex, m.count - 1)] == l.id
         return HStack(spacing: 0) {
             Button { model.composing = model.composing == anchor(l) ? nil : anchor(l) } label: {
                 HStack(spacing: 0) {
@@ -106,5 +145,8 @@ struct DiffView: View {
         }
         .padding(.trailing, 16).padding(.vertical, 1.5)
         .background(bg)
+        .background(isHit ? WorkItem.pendingColor.opacity(isCurrent ? 0.30 : 0.12) : .clear)
+        .overlay(alignment: .leading) { if isCurrent { Rectangle().fill(WorkItem.pendingColor).frame(width: 2) } }
+        .id(l.id)
     }
 }

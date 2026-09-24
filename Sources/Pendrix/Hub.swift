@@ -21,6 +21,8 @@ final class Hub: ObservableObject {
 
     enum Route: Hashable { case home, standup, review(ChangeRef) }
     @Published var route: Route = .home
+    /// Set while a sub-screen wants Esc for itself (e.g. clearing a search) instead of going home.
+    var escapeOwnedBySubview = false
     func go(_ r: Route) { withAnimation(.snappy(duration: 0.28)) { route = r } }
     func back() { go(.home) }
 
