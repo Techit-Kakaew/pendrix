@@ -30,7 +30,7 @@ struct GitLabHost: CodeHost {
         }
         inbox.own = try await o.map { item($0, kind: .ownMergeRequest) }
         let reviewURLs = Set(inbox.reviews.map(\.url))
-        inbox.todos = try await t.compactMap(todoItem).filter { !reviewURLs.contains($0.url) }
+        inbox.todos = try await t.filter { $0.author?.id != me.id }.compactMap(todoItem).filter { !reviewURLs.contains($0.url) }
         return inbox
     }
 

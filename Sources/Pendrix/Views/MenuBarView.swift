@@ -15,7 +15,35 @@ struct MenuBarView: View {
     }
     @Environment(\.isSnapshot) private var isSnapshot
 
+    @State private var cardsHeight: CGFloat = 0
+
     var body: some View {
+        VStack(spacing: 10) {
+            scrollableCards
+            footer
+        }
+        .padding(12)
+        .frame(width: 400)
+        .sheet(item: $hub.jiraCommentTarget) { JiraCommentSheet(item: $0).environmentObject(hub) }
+        .background { WindowBackdrop() }
+    }
+
+    /// ScrollView has no intrinsic height inside MenuBarExtra: measure the cards and cap at the screen.
+    @ViewBuilder
+    private var scrollableCards: some View {
+        if isSnapshot {
+            cards
+        } else {
+            let maxH = (NSScreen.main?.visibleFrame.height ?? 900) - 140
+            ScrollView(.vertical, showsIndicators: false) {
+                cards.background(GeometryReader { g in Color.clear.preference(key: MenuHeightKey.self, value: g.size.height) })
+            }
+            .onPreferenceChange(MenuHeightKey.self) { cardsHeight = $0 }
+            .frame(height: min(max(cardsHeight, 60), maxH))
+        }
+    }
+
+    private var cards: some View {
         VStack(spacing: 10) {
             GlassGroup(spacing: 10) {
                 if !config.jiraReady && !config.anyHostReady && !hub.isDemo {
@@ -47,6 +75,10 @@ struct MenuBarView: View {
                 }
                 }
             }
+        }
+    }
+
+    private var footer: some View {
             HStack {
                 if let t = hub.lastRefresh { Text("updated \(t.relative)").font(Type.meta).foregroundStyle(.tertiary) }
                 Spacer()
@@ -65,11 +97,6 @@ struct MenuBarView: View {
                 Button("Quit") { NSApp.terminate(nil) }.buttonStyle(.plain).font(Type.meta).foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 6)
-        }
-        .padding(12)
-        .frame(width: 400)
-        .sheet(item: $hub.jiraCommentTarget) { JiraCommentSheet(item: $0).environmentObject(hub) }
-        .background { WindowBackdrop() }
     }
 }
 
@@ -90,4 +117,9 @@ enum MenuBarIcon {
         img.isTemplate = true
         return img
     }()
+}
+
+private struct MenuHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
