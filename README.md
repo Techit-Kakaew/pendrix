@@ -41,6 +41,8 @@ Filter (⌘F) or Settings → Inbox: hide drafts, hide bot authors, group by rep
 
 Deep review: when the MR's repo is cloned under one of the folders in Settings → AI review (default `~/Desktop/works`), Pendrix fetches both branches, adds a temporary detached worktree at the MR head and runs claude there with read-only tools (Read, Grep, Glob, `git diff/log/show/blame`) so findings are verified against callers and tests — the `/code-review` approach. Your checkout is never touched. Without a clone it falls back to diff-only.
 
+Pairing: the AI pass starts automatically when you open a review request (Settings → AI review), so drafts arrive while you read; files it found nothing in show `ai ✓`. Click a line number and press "Ask AI" (with or without a typed question) to get a focused answer about that line as a draft.
+
 ## Jira from the app
 
 Right-click a Jira row: move to any available status, comment, assign to me. MRs/PRs whose title or branch mention a Jira key (PAY-412) show that issue as a chip, and the issue shows its MRs.
