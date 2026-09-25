@@ -46,7 +46,15 @@ struct MenuBarView: View {
     private var cards: some View {
         VStack(spacing: 10) {
             GlassGroup(spacing: 10) {
-                if !config.jiraReady && !config.anyHostReady && !hub.isDemo {
+                if !config.jiraReady && !config.anyHostReady && !hub.isDemo && Keychain.accessDenied {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("KEYCHAIN LOCKED OUT").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
+                        Text("macOS refused access to the stored tokens (the dialog was denied or closed).").font(Type.meta).foregroundStyle(.secondary)
+                        Button("Retry — allow in the dialog") { config.reloadSecrets(); Task { await hub.refresh() } }
+                            .buttonStyle(.plain).font(Type.title).foregroundStyle(WorkItem.Tone.active.color)
+                    }
+                    .padding(16).frame(maxWidth: .infinity, alignment: .leading).glass(tint: WorkItem.Tone.danger.color)
+                } else if !config.jiraReady && !config.anyHostReady && !hub.isDemo {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("NOT CONNECTED").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
                         Text("Add your Jira site and a GitLab or GitHub token to start watching.").font(Type.meta).foregroundStyle(.secondary)

@@ -98,6 +98,14 @@ final class Config: ObservableObject {
         return URL(string: s)
     }
 
+    /// Re-read secrets after a denied Keychain dialog.
+    func reloadSecrets() {
+        Keychain.retry()
+        jiraToken = Keychain.get("jiraToken") ?? ""
+        anthropicKey = Keychain.get("anthropicKey") ?? ""
+        hosts = hosts   // republish so HostConfig.ready re-evaluates
+    }
+
     func host(_ id: UUID) -> HostConfig? { hosts.first { $0.id == id } }
     func addHost(_ kind: HostKind) {
         hosts.append(HostConfig(kind: kind, baseURL: kind == .github ? "https://github.com" : ""))

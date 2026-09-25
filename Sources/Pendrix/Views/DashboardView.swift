@@ -47,6 +47,10 @@ struct DashboardView: View {
                 if hub.agingCount > 0 {
                     Text("\(hub.agingCount) overdue").font(Type.meta).foregroundStyle(WorkItem.Tone.danger.color)
                 }
+            } else if setupNeeded, Keychain.accessDenied {
+                Text("Keychain access was denied — tokens are stored but unreadable.").font(Type.meta).foregroundStyle(WorkItem.Tone.danger.color)
+                Button("Retry") { config.reloadSecrets(); Task { await hub.refresh() } }
+                    .buttonStyle(.plain).font(Type.meta).foregroundStyle(WorkItem.Tone.active.color)
             } else if setupNeeded {
                 Text("Connect Jira, GitLab or GitHub in Settings").font(Type.meta).foregroundStyle(.secondary)
             } else {

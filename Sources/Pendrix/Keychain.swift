@@ -32,11 +32,16 @@ enum Keychain {
     }
 
     private static var cache: [String: String]?
+    /// Set when the vault exists but macOS refused to hand it over (dialog denied/cancelled). UI shows a hint instead of "not connected".
+    nonisolated(unsafe) static var accessDenied = false
 
     static func get(_ account: String) -> String? {
         if disabled { return nil }
         return vault()[account]
     }
+
+    /// Drop the in-memory copy so the next read asks the keychain again (after a denied dialog).
+    static func retry() { cache = nil; accessDenied = false }
 
     static func set(_ value: String, for account: String) {
         if disabled { return }
@@ -106,8 +111,11 @@ enum Keychain {
                                 kSecReturnData as String: true,
                                 kSecMatchLimit as String: kSecMatchLimitOne]
         var out: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess else { return nil }
-        return out as? Data
+        let status = SecItemCopyMatching(q as CFDictionary, &out)
+        if status == errSecSuccess { if account == vaultAccount { accessDenied = false }; return out as? Data }
+        // -128 user cancelled, -25293 auth failed, -25308 interaction not allowed: the item is there, we were refused.
+        if account == vaultAccount, [errSecUserCanceled, errSecAuthFailed, errSecInteractionNotAllowed].contains(status) { accessDenied = true }
+        return nil
     }
 
     private static func listAccounts(service: String) -> [String] {
