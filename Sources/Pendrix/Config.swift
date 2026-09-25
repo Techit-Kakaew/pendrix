@@ -31,6 +31,8 @@ final class Config: ObservableObject {
     /// Comma-separated folders scanned for local clones (deep review runs claude inside the repo).
     @Published var repoRoots: String { didSet { d.set(repoRoots, forKey: "repoRoots") } }
     @Published var deepReview: Bool { didSet { d.set(deepReview, forKey: "deepReview") } }
+    /// Start the AI pass as soon as a review request opens, so drafts arrive while you read.
+    @Published var autoAIReview: Bool { didSet { d.set(autoAIReview, forKey: "autoAIReview") } }
     // Updates
     @Published var autoUpdate: Bool { didSet { d.set(autoUpdate, forKey: "autoUpdate") } }
     /// GitHub "owner/repo" whose releases carry Pendrix-x.y.z.dmg + .dmg.sha256.
@@ -61,6 +63,7 @@ final class Config: ObservableObject {
         agingHours = d.object(forKey: "agingHours") as? Int ?? 24
         repoRoots = d.string(forKey: "repoRoots") ?? "~/Desktop/works"
         deepReview = d.object(forKey: "deepReview") as? Bool ?? true
+        autoAIReview = d.object(forKey: "autoAIReview") as? Bool ?? true
         autoUpdate = d.object(forKey: "autoUpdate") as? Bool ?? true
         updateRepo = d.string(forKey: "updateRepo") ?? "Techit-Kakaew/pendrix"
         standupReminder = d.object(forKey: "standupReminder") as? Bool ?? false

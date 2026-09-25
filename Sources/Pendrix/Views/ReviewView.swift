@@ -3,6 +3,7 @@ import SwiftUI
 struct ReviewView: View {
     @StateObject var model: ReviewModel
     @EnvironmentObject var hub: Hub
+    @EnvironmentObject var config: Config
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var confirmMerge = false
 
@@ -33,7 +34,14 @@ struct ReviewView: View {
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task { if model.detail == nil { await model.load() } }
+        .task {
+            if model.detail == nil { await model.load() }
+            if config.autoAIReview, !model.aiAutoStarted, let d = model.detail, d.isOpen, model.aiDrafts.isEmpty,
+               hub.reviews.contains(where: { $0.change == model.ref }) {
+                model.aiAutoStarted = true
+                Task { await model.runAIReview() }
+            }
+        }
         .background {
             Group {
                 Button("") { model.toggleViewedAndAdvance() }.keyboardShortcut("v", modifiers: [])
@@ -168,7 +176,7 @@ struct ReviewView: View {
                     let hits = model.matchCount(in: f)
                     let drafts = model.draftCount(in: f.path)
                     fileRow(title: f.path, meta: hits > 0 ? "\(hits) hits" : drafts > 0 ? "\(drafts) drafts" : "+\(f.additions) −\(f.deletions)", selected: model.selectedFile == f.path,
-                            status: f.status, threads: unresolved,
+                            status: f.status, threads: unresolved, aiChecked: model.aiChecked(f),
                             viewed: model.commitMode ? nil : model.isViewed(f),
                             toggleViewed: { model.setViewed(f, !model.isViewed(f)) }) { model.selectedFile = f.path; model.showDrafts = false }
                 }
@@ -205,7 +213,7 @@ struct ReviewView: View {
         .help(c.url?.absoluteString ?? c.id)
     }
 
-    private func fileRow(title: String, meta: String, selected: Bool, status: FileDiff.Status?, threads: Int = 0,
+    private func fileRow(title: String, meta: String, selected: Bool, status: FileDiff.Status?, threads: Int = 0, aiChecked: Bool = false,
                          viewed: Bool? = nil, toggleViewed: (() -> Void)? = nil, _ tap: @escaping () -> Void) -> some View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         // The viewed toggle sits beside the row button, not inside it, so its tap isn't swallowed.
@@ -223,6 +231,7 @@ struct ReviewView: View {
                         if !dir.isEmpty { Text(dir).font(Type.meta).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head) }
                     }
                     Spacer(minLength: 4)
+                    if aiChecked { Text("ai ✓").font(.system(size: 9, weight: .semibold)).foregroundStyle(WorkItem.Tone.done.color.opacity(0.8)).help("AI review found nothing in this file") }
                     if threads > 0 { Circle().fill(WorkItem.Tone.warn.color).frame(width: 5, height: 5) }
                     Text(meta).font(Type.key).foregroundStyle(.tertiary)
                 }

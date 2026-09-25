@@ -137,6 +137,44 @@ enum AIReviewer {
         return (summary, map(findings, to: d), skipped)
     }
 
+    // MARK: ask about one line
+
+    /// A focused question at a line: the hunk around it plus the MR context. Returns a single draft anchored there.
+    static func ask(_ question: String, at anchor: LineAnchor, line: DiffLine, file: FileDiff, detail d: ChangeDetail) async throws -> AIDraft {
+        let all = file.hunks.flatMap(\.lines)
+        let idx = all.firstIndex { $0.id == line.id } ?? 0
+        let window = all[max(0, idx - 40)...min(all.count - 1, idx + 40)]
+        var ctx = ""
+        for l in window where l.kind != .meta {
+            let mark = l.id == line.id ? ">>" : "  "
+            switch l.kind {
+            case .add: ctx += "\(mark)+\(l.newNo ?? 0)| \(l.text)\n"
+            case .del: ctx += "\(mark)-\(l.oldNo ?? 0)| \(l.text)\n"
+            default: ctx += "\(mark) \(l.newNo ?? 0)| \(l.text)\n"
+            }
+        }
+        let q = question.trimmingCharacters(in: .whitespaces)
+        let prompt = """
+        You are pair-reviewing a merge request with a human. They point at ONE line (marked ">>") and ask a question. Do not use tools.
+        Answer as a review comment they could post: direct, specific, 1–5 sentences, concrete fix or reassurance, fenced code if useful.
+        If the concern is unfounded, say so plainly and why. Answer in the language of the question.
+        Output ONLY JSON: {"severity": "blocker"|"suggestion"|"nit"|"question", "body": string}
+
+        MR: \(d.title)
+        File: \(file.path)
+        Question: \(q.isEmpty ? "Is there anything wrong with this line? Anything the change misses here?" : q)
+
+        Context (format: <marker><sign><line>| code):
+        \(ctx)
+        """
+        let raw = try await ClaudeCLI.run(prompt: prompt, timeout: 180)
+        guard let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") else { throw APIError(message: "AI returned no JSON") }
+        struct A: Decodable { let severity: String?; let body: String }
+        let a = try JSONDecoder().decode(A.self, from: Data(String(raw[start...end]).utf8))
+        return AIDraft(path: file.path, anchor: anchor, severity: AIDraft.Severity(rawValue: a.severity ?? "") ?? .question,
+                       title: q.isEmpty ? "" : q, body: a.body)
+    }
+
     // MARK: deep review inside the local clone
 
     static func deepReview(_ d: ChangeDetail, repo: String) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {

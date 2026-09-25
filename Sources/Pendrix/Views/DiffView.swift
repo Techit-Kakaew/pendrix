@@ -53,14 +53,24 @@ struct DiffView: View {
                                 row(l)
                                 let ts = model.threads(at: l, in: file.path)
                                 let ds = model.commitMode ? [] : model.drafts(at: l, in: file.path)
-                                if !ts.isEmpty || !ds.isEmpty || model.composing == anchor(l) {
+                                if !ts.isEmpty || !ds.isEmpty || model.composing == anchor(l) || model.askingAt == anchor(l) {
                                     VStack(spacing: 8) {
                                         ForEach(ts) { t in ThreadView(thread: t, model: model) }
                                         ForEach(ds) { dft in DraftCard(draft: dft, model: model) }
+                                        if model.askingAt == anchor(l) {
+                                            HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Asking Claude about line \(l.newNo ?? l.oldNo ?? 0)…").font(Type.meta).foregroundStyle(.secondary) }
+                                                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                                                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WorkItem.pendingColor.opacity(0.06)))
+                                        }
                                         if model.composing == anchor(l) {
-                                            ComposeBox(text: $draft, placeholder: "Comment on line \(l.newNo ?? l.oldNo ?? 0)…", submit: "Comment") {
-                                                Task { await model.comment(draft, at: anchor(l)); draft = "" }
-                                            } cancel: { model.composing = nil; draft = "" }
+                                            VStack(alignment: .trailing, spacing: 6) {
+                                                ComposeBox(text: $draft, placeholder: "Comment on line \(l.newNo ?? l.oldNo ?? 0)… or type a question and press Ask AI", submit: "Comment") {
+                                                    Task { await model.comment(draft, at: anchor(l)); draft = "" }
+                                                } cancel: { model.composing = nil; draft = "" }
+                                                Button("Ask AI") { let q = draft; draft = ""; Task { await model.ask(q, at: l, in: file) } }
+                                                    .buttonStyle(.plain).font(Type.meta).fontWeight(.medium).foregroundStyle(WorkItem.pendingColor)
+                                                    .help("Ask Claude about this line. The answer arrives as a draft you can post or dismiss.")
+                                            }
                                             .padding(12)
                                             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.primary.opacity(0.06)))
                                         }

@@ -87,6 +87,7 @@ struct SettingsView: View {
                 Text("Overdue requests get a red pill, turn the card red, and notify once.").font(.caption).foregroundStyle(.secondary)
             }
             Section("AI review") {
+                Toggle("Start AI review automatically when opening a review request", isOn: $config.autoAIReview)
                 Toggle("Deep review when the repo is cloned locally", isOn: $config.deepReview)
                 TextField("Folders to scan for clones (comma-separated)", text: $config.repoRoots, prompt: Text("~/Desktop/works, ~/dev"))
                 Text("Deep review runs the claude CLI inside a temporary worktree of the repo with read-only tools (Read, Grep, Glob, git diff/log/show), so it can check callers and tests. Otherwise only the diff is sent. Nothing is posted without you.")

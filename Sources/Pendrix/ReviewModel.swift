@@ -28,6 +28,26 @@ final class ReviewModel: ObservableObject {
     @Published var aiRunning = false
     @Published var aiError: String?
     @Published var aiMode: AIReviewer.Mode? = nil
+    @Published var askingAt: LineAnchor? = nil
+    var aiAutoStarted = false
+
+    /// Files the AI pass looked at and left without findings.
+    func aiChecked(_ f: FileDiff) -> Bool {
+        guard aiMode != nil, !aiRunning, !aiSkipped.contains(f.path) else { return false }
+        return !aiDrafts.contains { $0.path == f.path }
+    }
+
+    func ask(_ question: String, at line: DiffLine, in file: FileDiff) async {
+        guard let d = detail else { return }
+        let anchor = LineAnchor(path: file.path, oldLine: line.kind == .del ? line.oldNo : nil, newLine: line.kind == .del ? nil : line.newNo)
+        askingAt = anchor; composing = nil
+        defer { askingAt = nil }
+        do {
+            let draft = try await AIReviewer.ask(question, at: anchor, line: line, file: file, detail: d)
+            aiDrafts.append(draft)
+            if aiMode == nil { aiMode = .diffOnly }
+        } catch { aiError = error.localizedDescription; self.error = error.localizedDescription }
+    }
     @Published var showDrafts = false          // sidebar "AI drafts" screen selected
     var pendingDrafts: [AIDraft] { aiDrafts.filter { !$0.posted } }
 
