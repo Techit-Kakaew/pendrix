@@ -195,6 +195,27 @@ final class ReviewModel: ObservableObject {
     func threads(for path: String?) -> [ReviewThread] {
         commitMode ? [] : (detail?.threads.filter { $0.anchor?.path == path } ?? [])
     }
+    /// Threads and drafts keyed by DiffLine.id, built once per render instead of filtering per row.
+    func lineIndex(for file: FileDiff) -> (threads: [Int: [ReviewThread]], drafts: [Int: [AIDraft]]) {
+        var t: [Int: [ReviewThread]] = [:], d: [Int: [AIDraft]] = [:]
+        let ts = threads(for: file.path), ds = commitMode ? [] : pendingDrafts.filter { $0.path == file.path }
+        guard !ts.isEmpty || !ds.isEmpty else { return (t, d) }
+        var byNew: [Int: Int] = [:], byOld: [Int: Int] = [:]
+        for l in file.hunks.flatMap(\.lines) {
+            if let n = l.newNo, l.kind != .del { byNew[n] = l.id }
+            if l.kind == .del, let o = l.oldNo { byOld[o] = l.id }
+        }
+        func lineID(_ a: LineAnchor?) -> Int? {
+            guard let a else { return nil }
+            if let n = a.newLine { return byNew[n] }
+            if let o = a.oldLine { return byOld[o] }
+            return nil
+        }
+        for th in ts { if let id = lineID(th.anchor) { t[id, default: []].append(th) } }
+        for df in ds { if let id = lineID(df.anchor) { d[id, default: []].append(df) } }
+        return (t, d)
+    }
+
     func threads(at line: DiffLine, in path: String) -> [ReviewThread] {
         threads(for: path).filter { t in
             guard let a = t.anchor else { return false }

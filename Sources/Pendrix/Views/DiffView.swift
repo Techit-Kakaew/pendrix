@@ -40,19 +40,32 @@ struct DiffView: View {
                 Text(file.binary ? "Binary file" : "No diff to show").font(Type.meta).foregroundStyle(.tertiary).padding(16)
                 Spacer()
             } else {
+                let matches = currentMatches
+                let hitSet = Set(matches)
+                let currentHit = matches.isEmpty ? nil : matches[min(model.matchIndex, matches.count - 1)]
+                let index = model.lineIndex(for: file)
+                let lineCount = file.hunks.reduce(0) { $0 + $1.lines.count }
+                if lineCount > largeThreshold && !showLarge {
+                    VStack(spacing: 8) {
+                        Text("\(lineCount) lines in this diff").font(Type.title)
+                        Text("Rendering it all takes a moment. Search still works once shown.").font(Type.meta).foregroundStyle(.secondary)
+                        Button("Show anyway") { showLarge = true }.buttonStyle(.plain).font(Type.meta).foregroundStyle(WorkItem.Tone.active.color)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
                 GeometryReader { geo in
                 ScrollViewReader { proxy in
                 Scrolling(axes: [.vertical, .horizontal], indicators: true) {
-                    VStack(alignment: .leading, spacing: 0) {
+                    LazyRows(snapshot: isSnapshot) {
                         ForEach(file.hunks) { h in
                             Text(h.header).font(mono).foregroundStyle(.tertiary)
                                 .padding(.horizontal, 16).padding(.vertical, 5)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(Color.primary.opacity(0.03))
                             ForEach(h.lines) { l in
-                                row(l)
-                                let ts = model.threads(at: l, in: file.path)
-                                let ds = model.commitMode ? [] : model.drafts(at: l, in: file.path)
+                                row(l, isHit: hitSet.contains(l.id), isCurrent: currentHit == l.id)
+                                let ts = index.threads[l.id] ?? []
+                                let ds = index.drafts[l.id] ?? []
                                 if !ts.isEmpty || !ds.isEmpty || model.composing == anchor(l) || model.askingAt == anchor(l) {
                                     VStack(spacing: 8) {
                                         ForEach(ts) { t in ThreadView(thread: t, model: model) }
@@ -86,6 +99,7 @@ struct DiffView: View {
                 }
                 .onChange(of: model.matchIndex) { _, _ in scrollToMatch(proxy) }
                 .onChange(of: model.query) { _, _ in model.matchIndex = 0; scrollToMatch(proxy) }
+                }
                 }
                 }
             }
@@ -133,16 +147,17 @@ struct DiffView: View {
         LineAnchor(path: file.path, oldLine: l.kind == .del ? l.oldNo : (l.newNo == nil ? l.oldNo : nil), newLine: l.kind == .del ? nil : l.newNo)
     }
 
-    private func row(_ l: DiffLine) -> some View {
+    private let largeThreshold = 4000
+    @State private var showLarge = false
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    private func row(_ l: DiffLine, isHit: Bool, isCurrent: Bool) -> some View {
         let bg: Color = switch l.kind {
         case .add: WorkItem.Tone.done.color.opacity(0.10)
         case .del: WorkItem.Tone.danger.color.opacity(0.10)
         default: .clear
         }
         let sign = l.kind == .add ? "+" : l.kind == .del ? "−" : " "
-        let m = currentMatches
-        let isHit = !m.isEmpty && m.contains(l.id)
-        let isCurrent = isHit && m[min(model.matchIndex, m.count - 1)] == l.id
         return HStack(spacing: 0) {
             Button { model.composing = model.composing == anchor(l) ? nil : anchor(l) } label: {
                 HStack(spacing: 0) {
@@ -170,5 +185,16 @@ struct DiffView: View {
         .background(isHit ? WorkItem.pendingColor.opacity(isCurrent ? 0.30 : 0.12) : .clear)
         .overlay(alignment: .leading) { if isCurrent { Rectangle().fill(WorkItem.pendingColor).frame(width: 2) } }
         .id(l.id)
+    }
+}
+
+
+/// LazyVStack in the app (only visible rows get built), plain VStack under ImageRenderer where laziness has no viewport.
+struct LazyRows<Content: View>: View {
+    let snapshot: Bool
+    @ViewBuilder var content: Content
+    var body: some View {
+        if snapshot { VStack(alignment: .leading, spacing: 0) { content } }
+        else { LazyVStack(alignment: .leading, spacing: 0) { content } }
     }
 }
