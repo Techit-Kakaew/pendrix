@@ -150,7 +150,15 @@ final class ReviewModel: ObservableObject {
         if let next = (files[(idx + 1)...] + files[..<idx]).first(where: { !isViewed($0) }) { selectedFile = next.path }
     }
     var viewedCount: Int { detail?.files.filter(isViewed).count ?? 0 }
-    var shownFiles: [FileDiff] { commitMode ? commitFiles : (detail?.files ?? []) }
+    /// Sidebar file filter: every whitespace-separated token must appear in the path (case-insensitive).
+    @Published var fileQuery = ""
+    @Published var fileFilterFocusRequest = 0
+    var allShownFiles: [FileDiff] { commitMode ? commitFiles : (detail?.files ?? []) }
+    var shownFiles: [FileDiff] {
+        let tokens = fileQuery.lowercased().split(separator: " ").map(String.init).filter { !$0.isEmpty }
+        guard !tokens.isEmpty else { return allShownFiles }
+        return allShownFiles.filter { f in let p = f.path.lowercased(); return tokens.allSatisfy { p.contains($0) } }
+    }
 
     func showCommit(_ c: CommitInfo?) {
         selectedCommit = c; commitFiles = []; composing = nil

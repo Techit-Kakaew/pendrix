@@ -50,6 +50,7 @@ struct ReviewView: View {
                 Button("") { if !ReviewModel.isTyping { model.selectFile(offset: 1) } }.keyboardShortcut("j", modifiers: [])
                 Button("") { if !ReviewModel.isTyping { model.selectFile(offset: -1) } }.keyboardShortcut("k", modifiers: [])
                 Button("") { model.searchFocusRequest += 1 }.keyboardShortcut("f", modifiers: .command)
+                Button("") { model.fileFilterFocusRequest += 1 }.keyboardShortcut("p", modifiers: .command)
                 Button("") { zoom(+1) }.keyboardShortcut("=", modifiers: .command)
                 Button("") { zoom(+1) }.keyboardShortcut("+", modifiers: .command)
                 Button("") { zoom(-1) }.keyboardShortcut("-", modifiers: .command)
@@ -59,7 +60,8 @@ struct ReviewView: View {
             }
             .hidden()
         }
-        .onChange(of: model.searchActive) { _, on in hub.escapeOwnedBySubview = on }
+        .onChange(of: model.searchActive) { _, on in hub.escapeOwnedBySubview = on || !model.fileQuery.isEmpty }
+        .onChange(of: model.fileQuery) { _, q in hub.escapeOwnedBySubview = model.searchActive || !q.isEmpty }
         .onDisappear { hub.escapeOwnedBySubview = false }
     }
 
@@ -165,12 +167,17 @@ struct ReviewView: View {
                     Text(c.title).font(Type.meta).foregroundStyle(.secondary).lineLimit(2).padding(.horizontal, 12).padding(.bottom, 6)
                 }
                 HStack(spacing: 6) {
-                    Text("FILES · \(model.shownFiles.count)").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
+                    Text(model.fileQuery.isEmpty ? "FILES · \(model.shownFiles.count)" : "FILES · \(model.shownFiles.count)/\(model.allShownFiles.count)")
+                        .font(Type.section).foregroundStyle(.secondary).kerning(0.8)
                     if !model.commitMode, model.viewedCount > 0 {
                         Text("· \(model.viewedCount) viewed").font(Type.section).foregroundStyle(model.viewedCount == d.files.count ? AnyShapeStyle(WorkItem.Tone.done.color) : AnyShapeStyle(.tertiary))
                     }
                 }
                 .padding(.horizontal, 12).padding(.top, model.commitMode ? 4 : 14).padding(.bottom, 4)
+                FileFilterField(model: model)
+                if model.shownFiles.isEmpty, !model.fileQuery.isEmpty {
+                    Text("No file matches").font(Type.meta).foregroundStyle(.tertiary).padding(.horizontal, 12).padding(.vertical, 6)
+                }
                 ForEach(model.shownFiles) { f in
                     let unresolved = model.threads(for: f.path).filter { !$0.resolved }.count
                     let hits = model.matchCount(in: f)
@@ -399,5 +406,28 @@ struct ViewedMark: View {
         .buttonStyle(.plain)
         .onHover { hover = $0 }
         .help(on ? "Viewed — click to unmark" : "Mark as viewed (v)")
+    }
+}
+
+
+/// ⌘P focuses; tokens match anywhere in the path ("handler test" → files with both); Esc clears.
+struct FileFilterField: View {
+    @ObservedObject var model: ReviewModel
+    @FocusState private var focused: Bool
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("Filter files  ⌘P", text: $model.fileQuery)
+                .textFieldStyle(.plain).font(Type.meta)
+                .focused($focused)
+                .onExitCommand { model.fileQuery = ""; focused = false }
+                .onSubmit { if let f = model.shownFiles.first { model.selectedFile = f.path; model.showDrafts = false }; focused = false }
+                .onChange(of: model.fileFilterFocusRequest) { _, _ in focused = true }
+            if !model.fileQuery.isEmpty {
+                Button("×") { model.fileQuery = "" }.buttonStyle(.plain).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.primary.opacity(focused || !model.fileQuery.isEmpty ? 0.08 : 0.04)))
+        .padding(.horizontal, 8).padding(.bottom, 6)
     }
 }
