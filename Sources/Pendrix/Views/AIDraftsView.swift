@@ -10,6 +10,9 @@ struct AIDraftsView: View {
         Scrolling {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                if model.aiStale {
+                    Text("New commits since the last AI pass — run again for fresh drafts.").font(Type.meta).foregroundStyle(WorkItem.Tone.warn.color)
+                }
                 if let e = model.aiError {
                     Text(e).font(Type.meta).foregroundStyle(WorkItem.Tone.danger.color).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(12)

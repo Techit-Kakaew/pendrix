@@ -193,6 +193,15 @@ final class Hub: ObservableObject {
 
     func host(for ref: ChangeRef) -> CodeHost? { config.host(ref.hostID).flatMap(makeHost) }
 
+    /// One model per change for the whole session, so leaving and returning keeps drafts, viewed marks and scroll state.
+    private var reviewModels: [ChangeRef: ReviewModel] = [:]
+    func reviewModel(for ref: ChangeRef) -> ReviewModel {
+        if let m = reviewModels[ref] { return m }
+        let m = ReviewModel(ref: ref, host: host(for: ref), kind: config.host(ref.hostID)?.kind ?? .gitlab)
+        reviewModels[ref] = m
+        return m
+    }
+
     // MARK: Standup
 
     @Published var standup: Standup?

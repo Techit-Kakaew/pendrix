@@ -14,7 +14,7 @@ struct RootView: View {
             case .standup:
                 StandupView().transition(.move(edge: .trailing).combined(with: .opacity))
             case .review(let ref):
-                ReviewView(model: ReviewModel(ref: ref, host: hub.host(for: ref), kind: config.host(ref.hostID)?.kind ?? .gitlab))
+                ReviewView(model: hub.reviewModel(for: ref))
                     .id(ref)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }

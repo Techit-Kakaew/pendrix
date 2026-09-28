@@ -35,7 +35,7 @@ struct ReviewView: View {
             }
         }
         .task {
-            if model.detail == nil { await model.load() }
+            if model.detail == nil { await model.load() } else { await model.load() }   // refresh threads/state on re-entry
             if config.autoAIReview, !model.aiAutoStarted, let d = model.detail, d.isOpen, model.aiDrafts.isEmpty,
                hub.reviews.contains(where: { $0.change == model.ref }) {
                 model.aiAutoStarted = true

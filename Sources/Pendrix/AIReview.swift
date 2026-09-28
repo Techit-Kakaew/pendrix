@@ -1,9 +1,9 @@
 import Foundation
 
 /// One suggested comment from the AI pass. Nothing here is sent until the user posts it.
-struct AIDraft: Identifiable, Hashable {
+struct AIDraft: Identifiable, Hashable, Codable {
     enum Severity: String, Codable, CaseIterable { case blocker, suggestion, nit, question }
-    let id = UUID()
+    var id = UUID()
     var path: String?
     var anchor: LineAnchor?
     var severity: Severity
@@ -74,7 +74,31 @@ enum ClaudeCLI {
 enum AIReviewer {
     static let maxDiffBytes = 180_000
 
-    enum Mode: Equatable { case diffOnly, deep(repo: String) }
+    enum Mode: Equatable, Codable { case diffOnly, deep(repo: String) }
+
+    /// What survives leaving the screen: drafts, summary, mode, and the head commit they were made for.
+    struct Saved: Codable {
+        var headSHA: String
+        var summary: String
+        var drafts: [AIDraft]
+        var skipped: [String]
+        var mode: Mode
+    }
+    private static var dir: URL {
+        let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Pendrix/ai", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+    private static func file(_ ref: ChangeRef) -> URL {
+        dir.appendingPathComponent("\(ref.hostID.uuidString)-\(ref.project.replacingOccurrences(of: "/", with: "_"))-\(ref.number).json")
+    }
+    static func save(_ s: Saved, for ref: ChangeRef) {
+        if let data = try? JSONEncoder().encode(s) { try? data.write(to: file(ref), options: .atomic) }
+    }
+    static func load(for ref: ChangeRef) -> Saved? {
+        guard let data = try? Data(contentsOf: file(ref)) else { return nil }
+        return try? JSONDecoder().decode(Saved.self, from: data)
+    }
 
     /// Deep when a local clone exists and the setting is on: a detached worktree at the MR head, claude with read-only tools.
     static func review(_ d: ChangeDetail) async throws -> (summary: String, drafts: [AIDraft], skipped: [String], mode: Mode) {

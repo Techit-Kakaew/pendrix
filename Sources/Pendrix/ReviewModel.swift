@@ -46,6 +46,7 @@ final class ReviewModel: ObservableObject {
             let draft = try await AIReviewer.ask(question, at: anchor, line: line, file: file, detail: d)
             aiDrafts.append(draft)
             if aiMode == nil { aiMode = .diffOnly }
+            persistAI()
         } catch { aiError = error.localizedDescription; self.error = error.localizedDescription }
     }
     @Published var showDrafts = false          // sidebar "AI drafts" screen selected
@@ -59,7 +60,24 @@ final class ReviewModel: ObservableObject {
             let r = try await AIReviewer.review(d)
             aiSummary = r.summary; aiDrafts = r.drafts; aiSkipped = r.skipped; aiMode = r.mode
             showDrafts = true; selectedFile = nil
+            persistAI()
         } catch { aiError = error.localizedDescription }
+    }
+
+    /// Bring back a previous pass for the same head commit; a new push invalidates it (and lets auto-review run again).
+    private func restoreAI(for d: ChangeDetail) {
+        guard aiDrafts.isEmpty, let s = AIReviewer.load(for: ref) else { return }
+        if s.headSHA == d.headSHA {
+            aiSummary = s.summary; aiDrafts = s.drafts; aiSkipped = s.skipped; aiMode = s.mode
+            aiAutoStarted = true
+        } else {
+            aiStale = !s.drafts.filter { !$0.posted }.isEmpty
+        }
+    }
+    @Published var aiStale = false   // a previous pass existed but the MR moved on
+    func persistAI() {
+        guard let d = detail else { return }
+        AIReviewer.save(.init(headSHA: d.headSHA, summary: aiSummary, drafts: aiDrafts, skipped: aiSkipped, mode: aiMode ?? .diffOnly), for: ref)
     }
     func drafts(at line: DiffLine, in path: String) -> [AIDraft] {
         pendingDrafts.filter { dft in
@@ -72,8 +90,9 @@ final class ReviewModel: ObservableObject {
     func draftCount(in path: String) -> Int { pendingDrafts.filter { $0.path == path }.count }
     func update(_ draft: AIDraft, body: String) {
         if let i = aiDrafts.firstIndex(where: { $0.id == draft.id }) { aiDrafts[i].body = body }
+        persistAI()
     }
-    func dismiss(_ draft: AIDraft) { aiDrafts.removeAll { $0.id == draft.id } }
+    func dismiss(_ draft: AIDraft) { aiDrafts.removeAll { $0.id == draft.id }; persistAI() }
     /// Posts one draft as a real comment (anchored when the line resolved, otherwise on the conversation with a path prefix).
     func post(_ draft: AIDraft) async {
         guard let host, let d = detail else { return }
@@ -83,6 +102,7 @@ final class ReviewModel: ObservableObject {
         do {
             try await host.comment(ref, at: draft.anchor, body: body, detail: d)
             if let i = aiDrafts.firstIndex(where: { $0.id == draft.id }) { aiDrafts[i].posted = true }
+            persistAI()
             flash = "Comment posted"; error = nil
             await load()
         } catch { self.error = error.localizedDescription }
@@ -193,6 +213,7 @@ final class ReviewModel: ObservableObject {
             let d = try await host.detail(ref)
             detail = d
             loadViewed()
+            restoreAI(for: d)
             if selectedFile == nil, d.threads.filter({ $0.anchor == nil }).isEmpty { selectedFile = d.files.first?.path }
             error = nil
         } catch { self.error = error.localizedDescription }
