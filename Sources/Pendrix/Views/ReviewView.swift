@@ -306,9 +306,9 @@ struct ConversationView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 ForEach(model.threads(for: nil)) { t in ThreadView(thread: t, model: model) }
-                ComposeBox(text: $draft, placeholder: "Comment on this \(model.kind.noun)…", submit: "Comment") {
+                ComposeBox(text: $draft, placeholder: "Comment on this \(model.kind.noun)…", submit: "Comment", action: {
                     Task { await model.comment(draft, at: nil); draft = "" }
-                }
+                }, conventional: true)
             }
             .padding(18)
         }
@@ -332,15 +332,21 @@ struct ThreadView: View {
                     HStack(spacing: 8) {
                         Text(c.author).font(Type.meta).fontWeight(.medium)
                         Text(c.created.relative).font(Type.meta).foregroundStyle(.tertiary)
+                        if let p = ConventionalComment.parse(c.body) { ConventionalPill(label: p.label, decorations: p.decorations) }
                     }
-                    Text(markdown(c.body)).font(Type.title).textSelection(.enabled).lineSpacing(2)
+                    if let p = ConventionalComment.parse(c.body) {
+                        Text(markdown(p.subject)).font(Type.title).fontWeight(.medium).textSelection(.enabled)
+                        if !p.discussion.isEmpty { Text(markdown(p.discussion)).font(Type.title).textSelection(.enabled).lineSpacing(2) }
+                    } else {
+                        Text(markdown(c.body)).font(Type.title).textSelection(.enabled).lineSpacing(2)
+                    }
                 }
             }
             HStack(spacing: 12) {
                 if replying {
-                    ComposeBox(text: $reply, placeholder: "Reply…", submit: "Reply") {
+                    ComposeBox(text: $reply, placeholder: "Reply…", submit: "Reply", action: {
                         Task { await model.reply(reply, to: thread); reply = ""; replying = false }
-                    }
+                    }, conventional: true)
                 } else {
                     Button("Reply") { replying = true }.buttonStyle(.plain).font(Type.meta).foregroundStyle(.secondary)
                     if thread.resolvable {
@@ -368,16 +374,30 @@ struct ComposeBox: View {
     let submit: String
     let action: () -> Void
     var cancel: (() -> Void)? = nil
+    /// When set, the picker's label/decorations are prefixed onto `text` before `action` runs.
+    var conventional = false
+    @State private var label = ""
+    @State private var decorations: Set<String> = []
+
+    private func fire() {
+        if conventional, !label.isEmpty, ConventionalComment.parse(text) == nil {
+            let parts = text.components(separatedBy: "\n\n")
+            text = ConventionalComment.format(label: label, decorations: Array(decorations).sorted(), subject: parts.first ?? "", discussion: parts.dropFirst().joined(separator: "\n\n"))
+        }
+        action()
+        label = ""; decorations = []
+    }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
+            if conventional { ConventionalPicker(label: $label, decorations: $decorations).frame(maxWidth: .infinity, alignment: .leading) }
             TextField(placeholder, text: $text, axis: .vertical)
                 .textFieldStyle(.plain).font(Type.title).lineLimit(2...8)
                 .padding(8)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.primary.opacity(0.05)))
             HStack(spacing: 10) {
                 if let cancel { Button("Cancel", action: cancel).buttonStyle(.plain).font(Type.meta).foregroundStyle(.tertiary) }
-                Button(submit, action: action).buttonStyle(.plain).font(Type.meta).fontWeight(.medium)
+                Button(submit, action: fire).buttonStyle(.plain).font(Type.meta).fontWeight(.medium)
                     .foregroundStyle(text.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(WorkItem.Tone.active.color))
                     .disabled(text.isEmpty).keyboardShortcut(.return, modifiers: .command)
             }

@@ -10,7 +10,13 @@ struct AIDraft: Identifiable, Hashable, Codable {
     var title: String
     var body: String
     var posted = false
-    var display: String { title.isEmpty ? body : "**\(title)**\n\n\(body)" }
+    var label: String = ""
+    var decorations: [String] = []
+    /// Posted text: conventional comment when a label is set, else the old bold-title form.
+    var display: String {
+        if !label.isEmpty { return ConventionalComment.format(label: label, decorations: decorations, subject: title, discussion: body) }
+        return title.isEmpty ? body : "**\(title)**\n\n\(body)"
+    }
 }
 
 /// Runs the Claude Code CLI in print mode with the user's existing login. No API key involved.
@@ -135,13 +141,18 @@ enum AIReviewer {
         let existing = d.threads.flatMap(\.comments).map(\.body).joined(separator: "\n---\n")
         let prompt = """
         You are a senior engineer reviewing a merge request. Do not use tools. Output ONLY a JSON object, no prose, no markdown fences:
-        {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "severity": "blocker"|"suggestion"|"nit"|"question", "title": string, "body": string}]}
+        {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "label": string, "decorations": [string], "subject": string, "discussion": string}]}
+
+        Comments follow conventionalcomments.org. "label" is one of: praise, nitpick, suggestion, issue, todo, question, thought, chore, note, typo, polish, quibble.
+        "decorations" is a subset of ["blocking", "non-blocking", "if-minor"] — use "blocking" only for issues that must be fixed before merge; nitpick/thought/note/praise are non-blocking by definition (leave decorations empty for them).
+        "subject" is one short sentence stating the point; "discussion" is the reasoning and the concrete fix (may be empty for praise/typo). Both are posted verbatim as "<label> (<decorations>): <subject>\\n\\n<discussion>".
+        Include at most one praise, only if something is genuinely well done.
 
         Rules:
         - Report real problems: bugs, races, security, data loss, error handling, API misuse, missing tests for risky logic, misleading names. Skip style that a formatter handles.
         - At most 12 findings, most important first. If the change is fine, return an empty findings array and say so in summary.
         - "line" MUST be a number that appears in the diff below: use the number after "+" or " " for side "new", the number after "-" for side "old".
-        - "body" is the comment as it should be posted: direct, specific, 1–4 sentences, with a concrete fix when possible. Use markdown sparingly; fenced code for code.
+        - "discussion" is direct and specific, 1–4 sentences, with a concrete fix when possible. Use markdown sparingly; fenced code for code.
         - Write in Thai if the MR title/description or existing comments are mostly Thai, otherwise in English. Keep identifiers, paths and code in their original form.
         - Do not repeat points already raised in existing comments.
 
@@ -180,9 +191,9 @@ enum AIReviewer {
         let q = question.trimmingCharacters(in: .whitespaces)
         let prompt = """
         You are pair-reviewing a merge request with a human. They point at ONE line (marked ">>") and ask a question. Do not use tools.
-        Answer as a review comment they could post: direct, specific, 1–5 sentences, concrete fix or reassurance, fenced code if useful.
-        If the concern is unfounded, say so plainly and why. Answer in the language of the question.
-        Output ONLY JSON: {"severity": "blocker"|"suggestion"|"nit"|"question", "body": string}
+        Answer as a review comment they could post, following conventionalcomments.org: pick a label (praise, nitpick, suggestion, issue, todo, question, thought, chore, note, typo, polish, quibble), decorations ⊆ ["blocking","non-blocking","if-minor"], a one-sentence subject, and a discussion of 1–5 sentences with a concrete fix or reassurance (fenced code if useful).
+        If the concern is unfounded, use label "note" and say plainly why. Answer in the language of the question.
+        Output ONLY JSON: {"label": string, "decorations": [string], "subject": string, "discussion": string}
 
         MR: \(d.title)
         File: \(file.path)
@@ -193,10 +204,12 @@ enum AIReviewer {
         """
         let raw = try await ClaudeCLI.run(prompt: prompt, timeout: 180)
         guard let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") else { throw APIError(message: "AI returned no JSON") }
-        struct A: Decodable { let severity: String?; let body: String }
+        struct A: Decodable { let label: String?; let decorations: [String]?; let subject: String?; let discussion: String?; let body: String? }
         let a = try JSONDecoder().decode(A.self, from: Data(String(raw[start...end]).utf8))
-        return AIDraft(path: file.path, anchor: anchor, severity: AIDraft.Severity(rawValue: a.severity ?? "") ?? .question,
-                       title: q.isEmpty ? "" : q, body: a.body)
+        let label = ConventionalComment.labels.contains((a.label ?? "").lowercased()) ? (a.label ?? "").lowercased() : "note"
+        let decos = (a.decorations ?? []).map { $0.lowercased() }.filter { ConventionalComment.decorations.contains($0) }
+        return AIDraft(path: file.path, anchor: anchor, severity: ConventionalComment.severity(label: label, decorations: decos),
+                       title: a.subject ?? "", body: a.discussion ?? a.body ?? "", label: label, decorations: decos)
     }
 
     // MARK: deep review inside the local clone
@@ -226,10 +239,11 @@ enum AIReviewer {
         Do not modify files. Do not run the project's build or tests.
 
         Output ONLY a JSON object at the end, no prose around it, no markdown fences:
-        {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "severity": "blocker"|"suggestion"|"nit"|"question", "title": string, "body": string}]}
+        {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "label": string, "decorations": [string], "subject": string, "discussion": string}]}
+        Comments follow conventionalcomments.org. "label" ∈ praise, nitpick, suggestion, issue, todo, question, thought, chore, note, typo, polish, quibble. "decorations" ⊆ ["blocking", "non-blocking", "if-minor"]; "blocking" only for must-fix-before-merge. "subject" = one short sentence; "discussion" = reasoning + concrete fix (empty allowed). Posted verbatim as "<label> (<decorations>): <subject>\\n\\n<discussion>". At most one praise, only if earned.
         - "path" is the repo-relative path. "line" for side "new" is the line number in the HEAD version of the file; for side "old" it is the line number in the base version. Only reference lines that are part of the diff hunks.
         - At most 12 findings, most important first. Empty findings if the change is fine; say so in summary.
-        - "body" is the comment as it should be posted: direct, specific, 1–4 sentences, concrete fix when possible, fenced code for code.
+        - "discussion" is direct and specific, 1–4 sentences, concrete fix when possible, fenced code for code.
         - Write in Thai if the MR title/description or existing comments are mostly Thai, otherwise English. Keep identifiers, paths and code verbatim.
         - Do not repeat points already in existing comments.
 
@@ -263,6 +277,17 @@ enum AIReviewer {
         return o
     }
 
+    private static func draft(from f: Finding, path: String, anchor: LineAnchor?) -> AIDraft {
+        let label = (f.label ?? "").lowercased()
+        let decos = (f.decorations ?? []).map { $0.lowercased() }.filter { ConventionalComment.decorations.contains($0) }
+        if ConventionalComment.labels.contains(label) {
+            return AIDraft(path: path, anchor: anchor, severity: ConventionalComment.severity(label: label, decorations: decos),
+                           title: f.subject ?? f.title ?? "", body: f.discussion ?? f.body ?? "", label: label, decorations: decos)
+        }
+        return AIDraft(path: path, anchor: anchor, severity: AIDraft.Severity(rawValue: f.severity ?? "") ?? .suggestion,
+                       title: f.subject ?? f.title ?? "", body: f.discussion ?? f.body ?? "")
+    }
+
     private static func map(_ findings: [Finding], to d: ChangeDetail) -> [AIDraft] {
         findings.map { f -> AIDraft in
             var anchor: LineAnchor? = nil
@@ -275,13 +300,18 @@ enum AIReviewer {
                 } else if let l = lines.first(where: { $0.newNo == f.line || $0.oldNo == f.line }) {
                     anchor = LineAnchor(path: file.path, oldLine: l.kind == .del ? l.oldNo : nil, newLine: l.kind == .del ? nil : l.newNo)
                 }
-                return AIDraft(path: file.path, anchor: anchor, severity: AIDraft.Severity(rawValue: f.severity) ?? .suggestion, title: f.title, body: f.body)
+                return draft(from: f, path: file.path, anchor: anchor)
             }
-            return AIDraft(path: f.path, anchor: nil, severity: AIDraft.Severity(rawValue: f.severity) ?? .suggestion, title: f.title, body: f.body)
+            return draft(from: f, path: f.path, anchor: nil)
         }
     }
 
-    private struct Finding: Decodable { let path: String; let line: Int; let side: String?; let severity: String; let title: String; let body: String }
+    private struct Finding: Decodable {
+        let path: String; let line: Int; let side: String?
+        let label: String?; let decorations: [String]?; let subject: String?; let discussion: String?
+        // legacy shape, still accepted
+        let severity: String?; let title: String?; let body: String?
+    }
     private struct Payload: Decodable { let summary: String?; let findings: [Finding]? }
 
     /// Tolerates fences or stray prose around the object.

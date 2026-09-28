@@ -77,9 +77,9 @@ struct DiffView: View {
                                         }
                                         if model.composing == anchor(l) {
                                             VStack(alignment: .trailing, spacing: 6) {
-                                                ComposeBox(text: $draft, placeholder: "Comment on line \(l.newNo ?? l.oldNo ?? 0)… or type a question and press Ask AI", submit: "Comment") {
+                                                ComposeBox(text: $draft, placeholder: "Comment on line \(l.newNo ?? l.oldNo ?? 0)… or type a question and press Ask AI", submit: "Comment", action: {
                                                     Task { await model.comment(draft, at: anchor(l)); draft = "" }
-                                                } cancel: { model.composing = nil; draft = "" }
+                                                }, cancel: { model.composing = nil; draft = "" }, conventional: true)
                                                 Button("Ask AI") { let q = draft; draft = ""; Task { await model.ask(q, at: l, in: file) } }
                                                     .buttonStyle(.plain).font(Type.meta).fontWeight(.medium).foregroundStyle(WorkItem.pendingColor)
                                                     .help("Ask Claude about this line. The answer arrives as a draft you can post or dismiss.")

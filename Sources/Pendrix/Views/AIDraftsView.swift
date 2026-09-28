@@ -94,7 +94,8 @@ struct DraftCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                StatusPill(text: draft.severity.rawValue, tone: tone)
+                if draft.label.isEmpty { StatusPill(text: draft.severity.rawValue, tone: tone) }
+                else { ConventionalPill(label: draft.label, decorations: draft.decorations) }
                 if !draft.title.isEmpty { Text(draft.title).font(Type.title).fontWeight(.medium).lineLimit(2) }
                 Spacer()
                 if let a = draft.anchor {
