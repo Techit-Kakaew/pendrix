@@ -88,6 +88,13 @@ final class ReviewModel: ObservableObject {
         }
     }
     func draftCount(in path: String) -> Int { pendingDrafts.filter { $0.path == path }.count }
+    /// Drafts for this file that could not be pinned to a visible line (or whose line isn't in the hunks).
+    func unanchoredDrafts(in file: FileDiff) -> [AIDraft] {
+        let ids = Set(file.hunks.flatMap(\.lines).map(\.id))
+        let index = lineIndex(for: file).drafts
+        let anchored = Set(index.filter { ids.contains($0.key) }.values.flatMap { $0 }.map(\.id))
+        return pendingDrafts.filter { $0.path == file.path && !anchored.contains($0.id) }
+    }
     func update(_ draft: AIDraft, body: String) {
         if let i = aiDrafts.firstIndex(where: { $0.id == draft.id }) { aiDrafts[i].body = body }
         persistAI()

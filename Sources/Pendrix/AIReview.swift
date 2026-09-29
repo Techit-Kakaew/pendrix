@@ -299,6 +299,10 @@ enum AIReviewer {
                     anchor = LineAnchor(path: file.path, oldLine: nil, newLine: l.newNo)
                 } else if let l = lines.first(where: { $0.newNo == f.line || $0.oldNo == f.line }) {
                     anchor = LineAnchor(path: file.path, oldLine: l.kind == .del ? l.oldNo : nil, newLine: l.kind == .del ? nil : l.newNo)
+                } else if let l = lines.filter({ $0.kind != .meta && $0.newNo != nil }).min(by: { abs(($0.newNo ?? 0) - f.line) < abs(($1.newNo ?? 0) - f.line) }),
+                          abs((l.newNo ?? 0) - f.line) <= 6 {
+                    // the model pointed just outside the hunk: snap to the nearest visible line rather than losing the anchor
+                    anchor = LineAnchor(path: file.path, oldLine: nil, newLine: l.newNo)
                 }
                 return draft(from: f, path: file.path, anchor: anchor)
             }

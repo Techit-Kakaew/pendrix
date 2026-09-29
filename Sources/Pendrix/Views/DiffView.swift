@@ -36,6 +36,15 @@ struct DiffView: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             Divider().opacity(0.4)
+            let loose = model.commitMode ? [] : model.unanchoredDrafts(in: file)
+            if !loose.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AI drafts on this file (no exact line)").font(Type.meta).foregroundStyle(.tertiary)
+                    ForEach(loose) { dft in DraftCard(draft: dft, model: model) }
+                }
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                Divider().opacity(0.4)
+            }
             if file.binary || file.hunks.isEmpty {
                 Text(file.binary ? "Binary file" : "No diff to show").font(Type.meta).foregroundStyle(.tertiary).padding(16)
                 Spacer()
