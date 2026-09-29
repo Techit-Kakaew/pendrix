@@ -98,16 +98,49 @@ struct DashboardView: View {
         }
     }
 
+    /// Sub-tasks under their parent (ordered by the freshest child); standalone issues first, unchanged.
+    private var jiraGroups: [(key: String?, items: [WorkItem])] {
+        let items = hub.visibleJira
+        let standalone = items.filter { $0.parentKey == nil }
+        let byParent = Dictionary(grouping: items.filter { $0.parentKey != nil }, by: { $0.parentKey! })
+        let parents = byParent.sorted { ($0.value.map(\.updated).max() ?? .distantPast) > ($1.value.map(\.updated).max() ?? .distantPast) }
+        var out: [(String?, [WorkItem])] = []
+        if !standalone.isEmpty { out.append((nil, standalone)) }
+        out += parents.map { ($0.key, $0.value) }
+        return out
+    }
+
     private var setupNeeded: Bool { !config.jiraReady && !config.anyHostReady }
 
     private var jiraColumn: some View {
         SectionCard(title: "Jira · my tasks", count: hub.visibleJira.count,
                     error: hub.jiraError,
                     empty: config.jiraReady ? "No open tasks" : "Not connected") {
-            ForEach(hub.visibleJira) { i in
-                ItemRow(item: i, isNew: hub.unseen.contains(i.id), open: { open(i) },
-                        links: hub.linkedChanges(for: i), openLink: open,
-                        menu: AnyView(JiraMenu(item: i).environmentObject(hub)), selected: hub.selectedID == i.id)
+            ForEach(jiraGroups, id: \.key) { g in
+                if let pk = g.key, let first = g.items.first {
+                    // parent header: key + title, click opens the parent in Jira
+                    Button {
+                        if let u = config.jiraURL { NSWorkspace.shared.open(u.appendingPathComponent("browse/\(pk)")) }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(pk).font(Type.key).foregroundStyle(.secondary)
+                            Text(first.parentTitle ?? "").font(Type.meta).foregroundStyle(.tertiary).lineLimit(1)
+                            Spacer()
+                            Text("\(g.items.count) sub-tasks").font(Type.meta).foregroundStyle(.quaternary)
+                        }
+                        .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 2).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                ForEach(g.items) { i in
+                    ItemRow(item: i, isNew: hub.unseen.contains(i.id), open: { open(i) },
+                            links: hub.linkedChanges(for: i), openLink: open,
+                            menu: AnyView(JiraMenu(item: i).environmentObject(hub)), selected: hub.selectedID == i.id)
+                        .padding(.leading, g.key == nil ? 0 : 14)
+                        .overlay(alignment: .leading) {
+                            if g.key != nil { Rectangle().fill(.primary.opacity(0.08)).frame(width: 1).padding(.vertical, 6).padding(.leading, 8) }
+                        }
+                }
             }
         }
     }

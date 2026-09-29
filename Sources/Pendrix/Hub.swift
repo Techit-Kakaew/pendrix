@@ -406,9 +406,13 @@ final class Hub: ObservableObject {
         let now = Date()
         func ago(_ h: Double) -> Date { now.addingTimeInterval(-h * 3600) }
         let u = URL(string: "https://example.com")!
+        var j398 = WorkItem(id: "jira:PAY-398", source: .jira, kind: .issue, key: "PAY-398", title: "Migrate settlement report to new ledger schema", subtitle: "Sub-task", url: u, updated: ago(3), status: "In Review", statusTone: .active, priority: "Medium")
+        j398.parentKey = "PAY-380"; j398.parentTitle = "Ledger v2 rollout"
+        var j399 = WorkItem(id: "jira:PAY-399", source: .jira, kind: .issue, key: "PAY-399", title: "Backfill ledger entries for Q3", subtitle: "Sub-task", url: u, updated: ago(6), status: "To Do", statusTone: .neutral, priority: "Medium")
+        j399.parentKey = "PAY-380"; j399.parentTitle = "Ledger v2 rollout"
         jira = [
             WorkItem(id: "jira:PAY-412", source: .jira, kind: .issue, key: "PAY-412", title: "Refund webhook retries drop idempotency key after 3rd attempt", subtitle: "Bug", url: u, updated: ago(0.4), status: "In Progress", statusTone: .active, priority: "High"),
-            WorkItem(id: "jira:PAY-398", source: .jira, kind: .issue, key: "PAY-398", title: "Migrate settlement report to new ledger schema", subtitle: "Story", url: u, updated: ago(3), status: "In Review", statusTone: .active, priority: "Medium"),
+            j398, j399,
             WorkItem(id: "jira:CORE-77", source: .jira, kind: .issue, key: "CORE-77", title: "Rate limiter: per-tenant buckets", subtitle: "Task", url: u, updated: ago(26), status: "To Do", statusTone: .neutral, priority: "Low"),
             WorkItem(id: "jira:CORE-81", source: .jira, kind: .issue, key: "CORE-81", title: "Spike: evaluate Swift 6 strict concurrency for SDK", subtitle: "Spike", url: u, updated: ago(50), status: "To Do", statusTone: .neutral, priority: "Lowest"),
         ]

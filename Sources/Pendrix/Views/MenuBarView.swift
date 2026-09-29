@@ -78,7 +78,7 @@ struct MenuBarView: View {
                     ForEach(hub.visibleJira.prefix(6)) { i in
                         ItemRow(item: i, isNew: hub.unseen.contains(i.id), open: { open(i) },
                                 links: hub.linkedChanges(for: i), openLink: open,
-                                menu: AnyView(JiraMenu(item: i).environmentObject(hub)))
+                                menu: AnyView(JiraMenu(item: i).environmentObject(hub)), showParent: true)
                     }
                 }
                 }

@@ -10,6 +10,7 @@ struct ItemRow: View {
     var menu: AnyView? = nil
     var selected = false
     var aging = false
+    var showParent = false
     @State private var hover = false
 
     var body: some View {
@@ -43,6 +44,10 @@ struct ItemRow: View {
                         if let p = item.priority, item.source == .jira {
                             Text("·").foregroundStyle(.quaternary)
                             Text(p).font(Type.meta).foregroundStyle(.tertiary)
+                        }
+                        if showParent, let pk = item.parentKey {
+                            Text("·").foregroundStyle(.quaternary)
+                            Text("↳ \(pk)").font(Type.meta).foregroundStyle(.tertiary).help(item.parentTitle ?? pk)
                         }
                         if !item.approvers.isEmpty {
                             Text("·").foregroundStyle(.quaternary)

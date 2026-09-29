@@ -20,7 +20,7 @@ struct JiraClient {
         comps.queryItems = [
             .init(name: "jql", value: jql),
             .init(name: "maxResults", value: String(max)),
-            .init(name: "fields", value: "summary,status,priority,issuetype,updated,project"),
+            .init(name: "fields", value: "summary,status,priority,issuetype,updated,project,parent"),
         ]
         var req = URLRequest(url: comps.url!)
         req.setValue(auth, forHTTPHeaderField: "Authorization")
@@ -39,7 +39,7 @@ struct JiraClient {
             case "done": .done
             default: .neutral
             }
-            return WorkItem(
+            var w = WorkItem(
                 id: "jira:\(i.key)", source: .jira, kind: .issue,
                 key: i.key, title: f.summary ?? "(no summary)",
                 subtitle: f.issuetype?.name ?? "Issue",
@@ -47,6 +47,8 @@ struct JiraClient {
                 updated: Dates.parse(f.updated),
                 status: f.status?.name, statusTone: tone,
                 priority: f.priority?.name)
+            w.parentKey = f.parent?.key; w.parentTitle = f.parent?.fields?.summary
+            return w
         }
     }
 
@@ -159,7 +161,10 @@ struct JiraClient {
         let status: Status?
         let priority: Named?
         let issuetype: Named?
+        let parent: Parent?
     }
+    private struct Parent: Decodable { let key: String; let fields: ParentFields? }
+    private struct ParentFields: Decodable { let summary: String? }
     private struct Status: Decodable { let name: String; let statusCategory: Category? }
     private struct Category: Decodable { let key: String }
     private struct Named: Decodable { let name: String }

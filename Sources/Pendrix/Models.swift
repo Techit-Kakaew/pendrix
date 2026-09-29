@@ -35,6 +35,9 @@ struct WorkItem: Identifiable, Hashable {
     var latestCommentAt: Date? = nil
     /// Set for MR/PR items: opens the in-app review window instead of the browser.
     var approvedByMe = false
+    // Jira sub-task → parent
+    var parentKey: String? = nil
+    var parentTitle: String? = nil
     var change: ChangeRef? = nil
     var hostLabel: String = ""
 
