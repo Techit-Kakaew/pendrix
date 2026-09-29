@@ -246,7 +246,13 @@ struct GitHubHost: CodeHost {
     }
 
     func merge(_ ref: ChangeRef) async throws {
-        _ = try await http.send("PUT", repo(ref, "/pulls/\(ref.number)/merge"), json: [:] as [String: String])
+        let p: PR = try await http.get(repo(ref, "/pulls/\(ref.number)"))
+        do { _ = try await http.send("PUT", repo(ref, "/pulls/\(ref.number)/merge"), json: ["sha": p.head.sha]) }
+        catch let e as APIError where e.message.contains("HTTP 409") {
+            throw APIError(message: "New commits arrived since you loaded this PR — refresh, re-check, then merge.")
+        } catch let e as APIError where e.message.contains("HTTP 405") {
+            throw APIError(message: "GitHub refused the merge: checks, reviews or conflicts still block it. Refresh to see why.")
+        }
     }
 
     private func split(_ p: String) -> (String, String) {

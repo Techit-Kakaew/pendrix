@@ -274,7 +274,16 @@ struct GitLabHost: CodeHost {
     }
 
     func merge(_ ref: ChangeRef) async throws {
-        _ = try await http.send("PUT", mr(ref, "/merge"))
+        // Projects can require the head SHA so a merge never picks up commits pushed after you looked.
+        let m: MRFull = try await http.get(mr(ref))
+        var form: [String: String] = [:]
+        if let sha = m.diff_refs?.head_sha ?? m.sha { form["sha"] = sha }
+        do { _ = try await http.send("PUT", mr(ref, "/merge"), form: form) }
+        catch let e as APIError where e.message.contains("HTTP 405") || e.message.contains("HTTP 406") {
+            throw APIError(message: "GitLab refused the merge: not mergeable yet (approvals, pipeline, conflicts or discussions). Refresh to see why.")
+        } catch let e as APIError where e.message.contains("HTTP 409") {
+            throw APIError(message: "New commits arrived since you loaded this MR — refresh, re-check, then merge.")
+        }
     }
 
     // MARK: wire types
@@ -287,6 +296,7 @@ struct GitLabHost: CodeHost {
         let author: Person?; let references: Refs?; let head_pipeline: Pipeline?
     }
     private struct MRFull: Decodable {
+        let sha: String?
         let title: String; let description: String?; let state: String; let web_url: String
         let source_branch: String; let target_branch: String; let draft: Bool?
         let detailed_merge_status: String?; let author: Person?; let head_pipeline: Pipeline?; let diff_refs: DiffRefs?
