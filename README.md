@@ -53,7 +53,7 @@ Right-click a Jira row: move to any available status, comment, assign to me. MRs
 
 ## Standup
 
-⌘⇧S (or the Standup button) opens Yesterday / Today / Blockers in the main window (Back / Esc returns): Jira moves and comments, pushes (one line per repo, tags ignored), MRs opened, reviews, merges, plus open work, review requests and blockers. Monday covers Friday. The spoken version comes from the Claude Code CLI by default (your login, Thai or English toggle) — Claude API key or on-device Apple Intelligence are alternatives in Settings → Standup. Edit, Copy (plain) or Copy Markdown. Optional weekday reminder.
+⌘⇧S (or the Standup button) opens Yesterday / Today / Blockers in the main window (Back / Esc returns): Jira moves and comments, pushes (one line per repo, tags ignored), MRs opened, reviews, merges, plus open work, review requests and blockers. Monday covers Friday. Two local sources fill in what tickets miss (Settings → Standup): your git commits across every clone under the AI-review folders — unpushed branches included, plus uncommitted work in repos you touched — and the prompts you gave Claude Code (`~/.claude/history.jsonl`, intent only, never quoted). A notes box on the Standup screen takes anything else (meetings, pairing). The spoken version comes from the Claude Code CLI by default (your login, Thai or English toggle) — Claude API key or on-device Apple Intelligence are alternatives in Settings → Standup. Edit, Copy (plain) or Copy Markdown. Optional weekday reminder.
 
 ## Review in-app
 
