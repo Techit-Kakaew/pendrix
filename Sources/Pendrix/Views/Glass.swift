@@ -104,13 +104,25 @@ struct Scrolling<Content: View>: View {
 struct WindowBackdrop: View {
     @Environment(\.isSnapshot) private var isSnapshot
     @Environment(\.colorScheme) private var scheme
+    @State private var fullScreen = false
     var body: some View {
         if !isSnapshot {
             ZStack {
-                WindowGlassTuner(material: .underWindowBackground)
-                Color(nsColor: .windowBackgroundColor).opacity(scheme == .dark ? 0.55 : 0.45)
+                if fullScreen {
+                    // Full screen has its own Space with nothing behind the window, so blur turns black. Paint a soft gradient instead.
+                    LinearGradient(colors: scheme == .dark
+                                   ? [Color(red: 0.13, green: 0.14, blue: 0.19), Color(red: 0.08, green: 0.08, blue: 0.11)]
+                                   : [Color(red: 0.93, green: 0.94, blue: 0.97), Color(red: 0.86, green: 0.87, blue: 0.91)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                } else {
+                    WindowGlassTuner(material: .underWindowBackground)
+                    Color(nsColor: .windowBackgroundColor).opacity(scheme == .dark ? 0.55 : 0.45)
+                }
             }
             .ignoresSafeArea()
+            .onAppear { fullScreen = NSApp.keyWindow?.styleMask.contains(.fullScreen) ?? false }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in fullScreen = true }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in fullScreen = false }
         }
     }
 }
