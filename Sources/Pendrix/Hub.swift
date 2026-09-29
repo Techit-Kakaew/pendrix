@@ -380,7 +380,7 @@ final class Hub: ObservableObject {
             WorkItem(id: "gl:mr:3", source: .gitlab, kind: .reviewRequest, key: "infra/helm!17", title: "Add PodDisruptionBudget for gateway", subtitle: "Ken W.", url: u, updated: ago(30), status: "draft", statusTone: .neutral, isDraft: true, pipeline: "running", hostLabel: "git.7.solutions"),
         ]
         ownMRs = [
-            WorkItem(id: "gl:mr:4", source: .gitlab, kind: .ownMergeRequest, key: "pay/gateway!479", title: "fix(ledger): settlement rounding on multi-currency", subtitle: "fix/ledger-rounding", url: u, updated: ago(1.5), status: "mergeable", statusTone: .done, pipeline: "success", approvals: 2, hostLabel: "git.7.solutions"),
+            WorkItem(id: "gl:mr:4", source: .gitlab, kind: .ownMergeRequest, key: "pay/gateway!479", title: "fix(ledger): settlement rounding on multi-currency", subtitle: "fix/ledger-rounding", url: u, updated: ago(1.5), status: "mergeable", statusTone: .done, pipeline: "success", approvals: 2, approvers: ["Mai P.", "Ken W."], hostLabel: "git.7.solutions"),
             WorkItem(id: "gl:mr:5", source: .gitlab, kind: .ownMergeRequest, key: "core/sdk!88", title: "refactor: hexagonal ports for payment adapters", subtitle: "refactor/ports", url: u, updated: ago(20), status: "conflicts", statusTone: .danger, hasConflicts: true, pipeline: "success", hostLabel: "git.7.solutions"),
         ]
         approved = [

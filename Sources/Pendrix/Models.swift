@@ -26,6 +26,7 @@ struct WorkItem: Identifiable, Hashable {
     var hasConflicts = false
     var pipeline: String? = nil   // success / failed / running
     var approvals: Int = 0
+    var approvers: [String] = []      // real approvals (not upvotes)
     /// Set for MR/PR items: opens the in-app review window instead of the browser.
     var approvedByMe = false
     var change: ChangeRef? = nil

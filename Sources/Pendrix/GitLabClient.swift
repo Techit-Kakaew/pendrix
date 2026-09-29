@@ -31,7 +31,30 @@ struct GitLabHost: CodeHost {
         inbox.own = try await o.map { item($0, kind: .ownMergeRequest) }
         let reviewURLs = Set(inbox.reviews.map(\.url))
         inbox.todos = try await t.filter { $0.author?.id != me.id }.compactMap(todoItem).filter { !reviewURLs.contains($0.url) }
+        inbox.reviews = await withApprovals(inbox.reviews)
+        inbox.own = await withApprovals(inbox.own)
+        inbox.approved = await withApprovals(inbox.approved)
         return inbox
+    }
+
+    /// Real approvals per MR (the list endpoint only has upvotes). One request each, bounded.
+    private func withApprovals(_ items: [WorkItem]) async -> [WorkItem] {
+        let slice = Array(items.prefix(30))
+        return await withTaskGroup(of: (Int, [String], Bool).self) { g in
+            for (i, it) in slice.enumerated() {
+                guard let ref = it.change else { continue }
+                g.addTask {
+                    let a: Approvals? = try? await self.http.get(self.mr(ref, "/approvals"))
+                    return (i, a?.approved_by?.map { $0.user.name } ?? [], (a?.approvals_left ?? 1) == 0 && !(a?.approved_by ?? []).isEmpty)
+                }
+            }
+            var out = items
+            for await (i, names, satisfied) in g {
+                out[i].approvers = names; out[i].approvals = names.count
+                if satisfied, out[i].statusTone == .active, !out[i].hasConflicts, !out[i].isDraft { out[i].statusTone = .done }
+            }
+            return out
+        }
     }
 
     private func item(_ m: MR, kind: WorkItem.Kind) -> WorkItem {
@@ -53,7 +76,7 @@ struct GitLabHost: CodeHost {
             url: URL(string: m.web_url) ?? base, updated: Dates.parse(m.updated_at),
             status: status, statusTone: tone,
             isDraft: m.draft ?? false, hasConflicts: m.has_conflicts ?? false,
-            pipeline: m.head_pipeline?.status, approvals: m.upvotes ?? 0,
+            pipeline: m.head_pipeline?.status,
             change: ChangeRef(hostID: config.id, project: String(m.project_id), number: m.iid),
             hostLabel: config.host)
     }
@@ -253,7 +276,7 @@ struct GitLabHost: CodeHost {
         let system: Bool; let resolvable: Bool?; let resolved: Bool?; let position: Position?
     }
     private struct Position: Decodable { let position_type: String?; let new_path: String?; let old_path: String?; let new_line: Int?; let old_line: Int? }
-    private struct Approvals: Decodable { let approved_by: [ApprovedBy]? }
+    private struct Approvals: Decodable { let approved_by: [ApprovedBy]?; let approvals_left: Int? }
     private struct ApprovedBy: Decodable { let user: Person }
     private struct Todo: Decodable {
         let id: Int; let action_name: String; let target_type: String; let target_url: String

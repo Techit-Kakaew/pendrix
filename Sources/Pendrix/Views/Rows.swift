@@ -39,9 +39,10 @@ struct ItemRow: View {
                             Text("·").foregroundStyle(.quaternary)
                             Text(p).font(Type.meta).foregroundStyle(.tertiary)
                         }
-                        if item.approvals > 0 {
+                        if !item.approvers.isEmpty {
                             Text("·").foregroundStyle(.quaternary)
-                            Text("\(item.approvals) approved").font(Type.meta).foregroundStyle(.tertiary)
+                            Text("✓ \(item.approvers.joined(separator: ", "))").font(Type.meta).foregroundStyle(WorkItem.Tone.done.color).lineLimit(1)
+                                .help("Approved by \(item.approvers.joined(separator: ", "))")
                         }
                     }
                     if !links.isEmpty {

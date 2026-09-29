@@ -30,7 +30,27 @@ struct GitHubHost: CodeHost {
         inbox.approved = try await ap.items.map { i in var w = item(i, kind: .reviewRequest); w.approvedByMe = true; w.status = "reviewed"; w.statusTone = .done; return w }
         inbox.own = try await o.items.map { item($0, kind: .ownMergeRequest) }
         inbox.todos = try await t.items.map { item($0, kind: .todo) }
+        inbox.reviews = await withApprovals(inbox.reviews)
+        inbox.own = await withApprovals(inbox.own)
         return inbox
+    }
+
+    private func withApprovals(_ items: [WorkItem]) async -> [WorkItem] {
+        let slice = Array(items.prefix(30))
+        return await withTaskGroup(of: (Int, [String]).self) { g in
+            for (i, it) in slice.enumerated() {
+                guard let ref = it.change else { continue }
+                g.addTask {
+                    let rv: [Review]? = try? await self.http.get(url(self.api, "repos/\(ref.project)/pulls/\(ref.number)/reviews", ["per_page": "100"]))
+                    var latest: [String: String] = [:]
+                    for r in (rv ?? []).sorted(by: { ($0.submitted_at ?? "") < ($1.submitted_at ?? "") }) where r.state != "COMMENTED" { latest[r.user?.login ?? "?"] = r.state }
+                    return (i, latest.filter { $0.value == "APPROVED" }.map(\.key).sorted())
+                }
+            }
+            var out = items
+            for await (i, names) in g { out[i].approvers = names; out[i].approvals = names.count }
+            return out
+        }
     }
 
     private func item(_ i: Issue, kind: WorkItem.Kind) -> WorkItem {
