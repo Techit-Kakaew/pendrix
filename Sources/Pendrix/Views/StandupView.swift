@@ -52,6 +52,7 @@ struct StandupView: View {
             headerButton("Copy Markdown") { copy(markdown: true) }
         }
         .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 14)
+        .windowDragHandle()
     }
 
     private func headerButton(_ title: String, tone: WorkItem.Tone? = nil, _ action: @escaping () -> Void) -> some View {

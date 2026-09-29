@@ -119,6 +119,7 @@ struct ReviewView: View {
             }
         }
         .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 12)
+        .windowDragHandle()
     }
 
     /// ⌘+ / ⌘- step the diff font between 9 and 22 pt; ⌘0 resets.

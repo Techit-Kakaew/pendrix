@@ -80,6 +80,7 @@ struct DashboardView: View {
                 .keyboardShortcut(",").buttonStyle(.plain).font(Type.meta).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 14)
+        .windowDragHandle()
     }
 
     /// Flat list, or repo sub-headers when grouping is on.
