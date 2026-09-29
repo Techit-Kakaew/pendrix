@@ -33,8 +33,40 @@ struct GitLabHost: CodeHost {
         inbox.todos = try await t.filter { $0.author?.id != me.id }.compactMap(todoItem).filter { !reviewURLs.contains($0.url) }
         inbox.reviews = await withApprovals(inbox.reviews)
         inbox.own = await withApprovals(inbox.own)
+        inbox.own = await withReviewActivity(inbox.own, me: me.id)
         inbox.approved = await withApprovals(inbox.approved)
         return inbox
+    }
+
+    /// Who reviewed your MR: human notes by others, unresolved threads, latest note (for "new since" alerts).
+    private func withReviewActivity(_ items: [WorkItem], me: Int) async -> [WorkItem] {
+        let slice = Array(items.prefix(30))
+        return await withTaskGroup(of: (Int, [String], Int, Int, String?, Date?).self) { g in
+            for (i, it) in slice.enumerated() {
+                guard let ref = it.change else { continue }
+                g.addTask {
+                    let ds: [Discussion] = (try? await self.http.get(self.mr(ref, "/discussions", ["per_page": "100"]))) ?? []
+                    var names: [String] = [], count = 0, unresolved = 0, latestID: String? = nil, latestAt: Date? = nil
+                    for d in ds {
+                        let human = d.notes.filter { !$0.system }
+                        if let f = human.first, f.resolvable == true, f.resolved != true { unresolved += 1 }
+                        for n in human where n.author.id != me {
+                            count += 1
+                            if !names.contains(n.author.name) { names.append(n.author.name) }
+                            let at = Dates.parse(n.created_at)
+                            if latestAt == nil || at > latestAt! { latestAt = at; latestID = String(n.id) }
+                        }
+                    }
+                    return (i, names, count, unresolved, latestID, latestAt)
+                }
+            }
+            var out = items
+            for await (i, names, count, unresolved, id, at) in g {
+                out[i].commenters = names; out[i].commentCount = count; out[i].unresolvedThreads = unresolved
+                out[i].latestCommentID = id; out[i].latestCommentAt = at
+            }
+            return out
+        }
     }
 
     /// Real approvals per MR (the list endpoint only has upvotes). One request each, bounded.

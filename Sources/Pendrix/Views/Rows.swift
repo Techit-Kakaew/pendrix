@@ -45,6 +45,21 @@ struct ItemRow: View {
                                 .help("Approved by \(item.approvers.joined(separator: ", "))")
                         }
                     }
+                    if item.kind == .ownMergeRequest, item.commentCount > 0 {
+                        HStack(spacing: 6) {
+                            Text("\(item.commentCount) \(item.commentCount == 1 ? "comment" : "comments") from \(item.commenters.prefix(3).joined(separator: ", "))\(item.commenters.count > 3 ? " +\(item.commenters.count - 3)" : "")")
+                                .font(Type.meta).foregroundStyle(WorkItem.Tone.warn.color).lineLimit(1)
+                            if item.unresolvedThreads > 0 {
+                                Text("·").foregroundStyle(.quaternary)
+                                Text("\(item.unresolvedThreads) unresolved").font(Type.meta).foregroundStyle(WorkItem.Tone.warn.color)
+                            }
+                            if let at = item.latestCommentAt {
+                                Text("·").foregroundStyle(.quaternary)
+                                Text(at.relative).font(Type.meta).foregroundStyle(.tertiary)
+                            }
+                        }
+                        .padding(.top, 1)
+                    }
                     if !links.isEmpty {
                         HStack(spacing: 6) {
                             ForEach(links) { l in LinkChip(item: l) { openLink?(l) } }

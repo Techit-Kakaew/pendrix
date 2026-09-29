@@ -32,6 +32,7 @@ struct GitHubHost: CodeHost {
         inbox.todos = try await t.items.map { item($0, kind: .todo) }
         inbox.reviews = await withApprovals(inbox.reviews)
         inbox.own = await withApprovals(inbox.own)
+        inbox.own = await withReviewActivity(inbox.own, me: (try? await http.get(url(api, "user")) as GHUser?)?.login ?? "")
         return inbox
     }
 
@@ -49,6 +50,33 @@ struct GitHubHost: CodeHost {
             }
             var out = items
             for await (i, names) in g { out[i].approvers = names; out[i].approvals = names.count }
+            return out
+        }
+    }
+
+    private func withReviewActivity(_ items: [WorkItem], me: String) async -> [WorkItem] {
+        let slice = Array(items.prefix(30))
+        return await withTaskGroup(of: (Int, [String], Int, String?, Date?).self) { g in
+            for (i, it) in slice.enumerated() {
+                guard let ref = it.change else { continue }
+                g.addTask {
+                    struct C: Decodable { let id: Int; let user: GHUser?; let created_at: String? }
+                    let rc: [C] = (try? await self.http.get(url(self.api, "repos/\(ref.project)/pulls/\(ref.number)/comments", ["per_page": "100"]))) ?? []
+                    let ic: [C] = (try? await self.http.get(url(self.api, "repos/\(ref.project)/issues/\(ref.number)/comments", ["per_page": "100"]))) ?? []
+                    var names: [String] = [], count = 0, latestID: String? = nil, latestAt: Date? = nil
+                    for c in rc + ic where (c.user?.login ?? "") != me && !(c.user?.login ?? "").hasSuffix("[bot]") {
+                        count += 1
+                        if let l = c.user?.login, !names.contains(l) { names.append(l) }
+                        let at = Dates.parse(c.created_at)
+                        if latestAt == nil || at > latestAt! { latestAt = at; latestID = String(c.id) }
+                    }
+                    return (i, names, count, latestID, latestAt)
+                }
+            }
+            var out = items
+            for await (i, names, count, id, at) in g {
+                out[i].commenters = names; out[i].commentCount = count; out[i].latestCommentID = id; out[i].latestCommentAt = at
+            }
             return out
         }
     }

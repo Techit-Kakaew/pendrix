@@ -145,6 +145,30 @@ final class Hub: ObservableObject {
         known = all
         UserDefaults.standard.set(Array(all), forKey: knownKey)
 
+        // Someone reviewed your MR: notify once per new latest comment.
+        if config.notify {
+            var seenComments = (UserDefaults.standard.dictionary(forKey: "seenComments") as? [String: String]) ?? [:]
+            for m in ownMRs where m.commentCount > 0 {
+                guard let id = m.latestCommentID else { continue }
+                let key = m.id
+                if let prev = seenComments[key], prev == id { continue }
+                let firstTime = seenComments[key] == nil
+                seenComments[key] = id
+                if firstTime && !seeded { continue }          // don't blast on first launch
+                if firstTime, let at = m.latestCommentAt, Date().timeIntervalSince(at) > 86400 { continue }
+                let c = UNMutableNotificationContent()
+                c.title = "\(m.commenters.first ?? "Someone") reviewed \(m.key)"
+                c.body = m.title + (m.unresolvedThreads > 0 ? " — \(m.unresolvedThreads) unresolved" : "")
+                c.userInfo = ["url": m.url.absoluteString]
+                if let data = try? JSONEncoder().encode(m.change) { c.userInfo["change"] = String(decoding: data, as: UTF8.self) }
+                c.sound = .default
+                if Bundle.main.bundleIdentifier != nil {
+                    UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "comment.\(m.id)", content: c, trigger: nil)) { _ in }
+                }
+            }
+            UserDefaults.standard.set(seenComments, forKey: "seenComments")
+        }
+
         // Aging: one notification per review request when it crosses the threshold.
         if config.notify, config.agingHours > 0 {
             var done = agedNotified
@@ -395,7 +419,7 @@ final class Hub: ObservableObject {
         ]
         ownMRs = [
             WorkItem(id: "gl:mr:4", source: .gitlab, kind: .ownMergeRequest, key: "pay/gateway!479", title: "fix(ledger): settlement rounding on multi-currency", subtitle: "fix/ledger-rounding", url: u, updated: ago(1.5), status: "mergeable", statusTone: .done, pipeline: "success", approvals: 2, approvers: ["Mai P.", "Ken W."], hostLabel: "git.7.solutions"),
-            WorkItem(id: "gl:mr:5", source: .gitlab, kind: .ownMergeRequest, key: "core/sdk!88", title: "refactor: hexagonal ports for payment adapters", subtitle: "refactor/ports", url: u, updated: ago(20), status: "conflicts", statusTone: .danger, hasConflicts: true, pipeline: "success", hostLabel: "git.7.solutions"),
+            WorkItem(id: "gl:mr:5", source: .gitlab, kind: .ownMergeRequest, key: "core/sdk!88", title: "refactor: hexagonal ports for payment adapters", subtitle: "refactor/ports", url: u, updated: ago(20), status: "conflicts", statusTone: .danger, hasConflicts: true, pipeline: "success", commenters: ["Mai P.", "Beam T."], commentCount: 4, unresolvedThreads: 2, latestCommentAt: ago(3), hostLabel: "git.7.solutions"),
         ]
         approved = [
             WorkItem(id: "gl:mr:6", source: .gitlab, kind: .reviewRequest, key: "pay/gateway!470", title: "fix(webhook): verify signature before parsing", subtitle: "Beam T.", url: u, updated: ago(9), status: "approved · not_approved", statusTone: .done, pipeline: "success", approvals: 1, approvedByMe: true, hostLabel: "git.7.solutions"),
