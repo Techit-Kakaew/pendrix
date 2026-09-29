@@ -21,7 +21,7 @@ struct WindowGlassTuner: NSViewRepresentable {
             window.isOpaque = false
             window.backgroundColor = .clear
             window.titlebarAppearsTransparent = true
-            window.isMovableByWindowBackground = true
+            window.isMovableByWindowBackground = false   // only the header rows drag (see .windowDragHandle)
             func walk(_ v: NSView) {
                 if let e = v as? NSVisualEffectView { e.material = material; e.blendingMode = .behindWindow; e.state = .active }
                 v.subviews.forEach(walk)
@@ -126,3 +126,20 @@ struct WindowBackdrop: View {
         }
     }
 }
+
+
+/// Marks a region as a window drag handle (the header row of each screen). Empty space there moves the window; controls still click.
+struct WindowDragHandle: ViewModifier {
+    func body(content: Content) -> some View {
+        content.background(DragArea())
+    }
+    private struct DragArea: NSViewRepresentable {
+        func makeNSView(context: Context) -> NSView { Handle() }
+        func updateNSView(_ nsView: NSView, context: Context) {}
+        final class Handle: NSView {
+            override var mouseDownCanMoveWindow: Bool { true }
+            override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+        }
+    }
+}
+extension View { func windowDragHandle() -> some View { modifier(WindowDragHandle()) } }
