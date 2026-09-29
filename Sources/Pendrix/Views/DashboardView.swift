@@ -166,7 +166,7 @@ struct FilterPopover: View {
                     Text("Off").tag(0); Text("4h").tag(4); Text("8h").tag(8); Text("24h").tag(24); Text("48h").tag(48)
                 }.labelsHidden().frame(width: 80)
             }
-            Text("j / k or arrows move · Enter opens · a approves · ⌘F filters").font(Type.meta).foregroundStyle(.tertiary)
+            Text("j / k or arrows move · Enter opens · o opens in browser · a approves · ⌘F filters").font(Type.meta).foregroundStyle(.tertiary)
         }
         .padding(14).frame(width: 280)
     }
@@ -185,10 +185,11 @@ private struct Keys: ViewModifier {
             content
                 .focusable().focusEffectDisabled().focused($focused)
                 .onAppear { focused = true }
-                .onKeyPress(characters: .init(charactersIn: "jkaJK"), phases: .down) { press in
+                .onKeyPress(characters: .init(charactersIn: "jkaoJKAO"), phases: .down) { press in
                     switch press.characters.lowercased() {
                     case "j": hub.moveSelection(1)
                     case "k": hub.moveSelection(-1)
+                    case "o": if let i = hub.selectedItem { hub.markSeen(i); NSWorkspace.shared.open(i.url) }
                     case "a": if let i = hub.selectedItem { Task { await hub.quickApprove(i) } }
                     default: return .ignored
                     }

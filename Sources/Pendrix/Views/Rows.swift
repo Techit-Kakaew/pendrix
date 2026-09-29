@@ -25,6 +25,11 @@ struct ItemRow: View {
                         if aging { StatusPill(text: "waiting \(item.updated.relative)", tone: .danger) }
                         if let p = item.pipeline { PipelineMark(status: p) }
                         Spacer(minLength: 0)
+                        if hover, item.change != nil {
+                            Button("browser") { NSWorkspace.shared.open(item.url) }
+                                .buttonStyle(.plain).font(Type.meta).foregroundStyle(.secondary)
+                                .help("Open in browser (o)")
+                        }
                         Text(item.updated.relative).font(Type.meta).foregroundStyle(.tertiary).monospacedDigit()
                     }
                     Text(item.title).font(Type.title).lineLimit(2).multilineTextAlignment(.leading)
@@ -81,7 +86,11 @@ struct ItemRow: View {
         .onHover { hover = $0 }
         .animation(.easeOut(duration: 0.12), value: hover)
         .help(item.url.absoluteString)
-        .contextMenu { if let menu { menu } }
+        .contextMenu {
+            Button("Open in browser") { NSWorkspace.shared.open(item.url) }
+            Button("Copy link") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(item.url.absoluteString, forType: .string) }
+            if let menu { Divider(); menu }
+        }
     }
 }
 
@@ -125,8 +134,6 @@ struct JiraMenu: View {
             Divider()
             Button("Comment…") { hub.jiraCommentTarget = item }
             Button("Assign to me") { Task { await hub.jiraAssignToMe(item) } }
-            Divider()
-            Button("Open in browser") { hub.open(item) }
         }
         .task { transitions = await hub.jiraTransitions(item.key) }
     }
