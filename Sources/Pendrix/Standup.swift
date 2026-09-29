@@ -65,18 +65,18 @@ enum StandupBuilder {
 
         // Today: what's in flight, what's waiting on me, what's wrong with mine.
         for j in jira where j.statusTone == .active {
-            s.today.append("Continue \(j.key) \(j.title)")
+            s.today.append("Continue \(j.key) \"\(j.title)\"")
         }
         for r in reviews where !r.isDraft {
-            s.today.append("Review \(r.key) \(r.title) (\(r.subtitle))")
+            s.today.append("Review \(r.key) \"\(r.title)\" (\(r.subtitle))")
         }
         for m in own {
-            if m.hasConflicts { s.today.append("Fix conflicts on \(m.key) \(m.title)") }
-            else if m.status == "threads open" { s.today.append("Resolve threads on \(m.key) \(m.title)") }
-            else if m.pipeline == "failed" { s.today.append("Fix pipeline on \(m.key) \(m.title)") }
+            if m.hasConflicts { s.today.append("Fix conflicts on \(m.key) \"\(m.title)\"") }
+            else if m.status == "threads open" { s.today.append("Resolve threads on \(m.key) \"\(m.title)\"") }
+            else if m.pipeline == "failed" { s.today.append("Fix pipeline on \(m.key) \"\(m.title)\"") }
         }
         if s.today.isEmpty, let next = jira.first(where: { $0.statusTone == .neutral }) {
-            s.today.append("Start \(next.key) \(next.title)")
+            s.today.append("Start \(next.key) \"\(next.title)\"")
         }
 
         // Blockers.
@@ -85,7 +85,7 @@ enum StandupBuilder {
             s.blockers.append("\(m.key) waiting for review since \(m.updated.relative) ago")
         }
         for j in jira where (j.status ?? "").localizedCaseInsensitiveContains("block") {
-            s.blockers.append("\(j.key) is \(j.status ?? "blocked"): \(j.title)")
+            s.blockers.append("\(j.key) is \(j.status ?? "blocked"): \"\(j.title)\"")
         }
         return s
     }

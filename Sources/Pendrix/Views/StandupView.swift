@@ -93,6 +93,11 @@ struct StandupView: View {
                 let line = raw.trimmingCharacters(in: .whitespaces)
                 if heads.contains(line.trimmingCharacters(in: CharacterSet(charactersIn: ":："))) {
                     Text(line.uppercased()).font(Type.section).foregroundStyle(.secondary).kerning(0.8).padding(.top, 6)
+                } else if line.hasPrefix("- ") || line.hasPrefix("• ") {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Circle().fill(.secondary.opacity(0.5)).frame(width: 4, height: 4).offset(y: -2)
+                        Text(String(line.dropFirst(2))).font(.system(size: 14)).lineSpacing(3).textSelection(.enabled)
+                    }
                 } else {
                     Text(line).font(.system(size: 14)).lineSpacing(4).textSelection(.enabled)
                 }
