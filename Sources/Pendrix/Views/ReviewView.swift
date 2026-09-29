@@ -276,6 +276,7 @@ struct ReviewView: View {
                 .glass(radius: 14).padding(.horizontal, 18).padding(.bottom, 18)
         } else if let f = model.file(model.selectedFile) {
             DiffView(file: f, model: model)
+                .id("\(model.commitMode ? model.selectedCommit?.id ?? "" : "all")|\(f.path)")   // fresh view per file: lazy rows must not recycle across files
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .glass(radius: 14).padding(.horizontal, 18).padding(.bottom, 18)
         } else if model.commitMode {

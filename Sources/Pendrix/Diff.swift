@@ -3,7 +3,7 @@ import CryptoKit
 
 struct DiffLine: Identifiable, Hashable {
     enum Kind { case context, add, del, meta }
-    let id: Int
+    let id: Int          // unique within a file
     let kind: Kind
     let oldNo: Int?
     let newNo: Int?
@@ -11,7 +11,7 @@ struct DiffLine: Identifiable, Hashable {
 }
 
 struct Hunk: Identifiable, Hashable {
-    let id: Int
+    let id: Int          // index within the file
     let header: String
     var lines: [DiffLine]
 }
