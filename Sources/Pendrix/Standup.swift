@@ -45,20 +45,20 @@ enum StandupBuilder {
         var s = Standup(since: since)
 
         // Yesterday: collapse pushes per branch, keep the rest in time order, newest last.
-        var pushes: [String: (count: Int, place: String)] = [:]
+        // one line per repo: "Pushed to feat/a, feat/b · repo" (main/master pushes are merges, usually already listed as Merged)
+        var pushes: [String: [String]] = [:]
         var lines: [(Date, String)] = []
         for a in activity.sorted(by: { $0.date < $1.date }) {
             if a.text.hasPrefix("pushed:") {
                 let branch = String(a.text.dropFirst("pushed:".count))
-                let k = "\(a.place)#\(branch)"
-                pushes[k, default: (0, a.place)].count += a.text.hasSuffix("+") ? 1 : 1
+                if ["main", "master", "develop"].contains(branch) { continue }
+                if !(pushes[a.place] ?? []).contains(branch) { pushes[a.place, default: []].append(branch) }
                 continue
             }
             lines.append((a.date, a.place.isEmpty ? a.text : "\(a.text) · \(a.place)"))
         }
-        for (k, v) in pushes.sorted(by: { $0.key < $1.key }) {
-            let branch = k.split(separator: "#", maxSplits: 1).last.map(String.init) ?? k
-            lines.append((.distantPast, "Pushed to \(branch) · \(v.place)"))
+        for (place, branches) in pushes.sorted(by: { $0.key < $1.key }) {
+            lines.append((.distantPast, "Pushed to \(branches.joined(separator: ", "))\(place.isEmpty ? "" : " · \(place)")"))
         }
         var seen = Set<String>()
         s.yesterday = lines.sorted { $0.0 < $1.0 }.map(\.1).filter { seen.insert($0).inserted }

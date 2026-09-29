@@ -77,6 +77,18 @@ if let i = CommandLine.arguments.firstIndex(of: "--deep-test"), i + 3 < CommandL
     RunLoop.main.run()
 }
 
+if CommandLine.arguments.contains("--polish-test") {
+    // Debug: run the standup polisher (CLI provider) on the demo standup in Thai and English.
+    Task { @MainActor in
+        let s = Hub.demoStandup()
+        for lang in [StandupLanguage.th, .en] {
+            do { print("== \(lang.rawValue)\n" + (try await CLIPolisher().polish(s, language: lang))) } catch { print("ERROR:", error.localizedDescription) }
+        }
+        exit(0)
+    }
+    RunLoop.main.run()
+}
+
 if CommandLine.arguments.contains("--ai-test") {
     // Debug: run the AI review pass on the demo change through the claude CLI and print the drafts.
     Task { @MainActor in

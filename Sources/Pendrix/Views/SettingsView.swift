@@ -119,6 +119,10 @@ struct SettingsView: View {
                     Text("Sends the bullet list (ticket keys, MR titles) to the Claude API. Model \(ClaudePolisher.model), low effort, with refusal fallback enabled.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                if config.aiProvider == .cli {
+                    Text("Uses the claude CLI with your Claude Code login — same as AI review. Works in Thai. Nothing to configure.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if config.aiProvider == .onDevice {
                     Text("Runs on this Mac with Apple Intelligence; nothing leaves the device. Thai support depends on the system model.")
                         .font(.caption).foregroundStyle(.secondary)

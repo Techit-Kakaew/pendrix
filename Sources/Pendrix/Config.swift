@@ -69,7 +69,7 @@ final class Config: ObservableObject {
         standupReminder = d.object(forKey: "standupReminder") as? Bool ?? false
         standupMinutes = d.object(forKey: "standupMinutes") as? Int ?? (9 * 60 + 30)
         standupLanguage = StandupLanguage(rawValue: d.string(forKey: "standupLanguage") ?? "") ?? .th
-        aiProvider = AIProvider(rawValue: d.string(forKey: "aiProvider") ?? "") ?? .off
+        aiProvider = AIProvider(rawValue: d.string(forKey: "aiProvider") ?? "") ?? .cli
         anthropicKey = Keychain.get("anthropicKey") ?? ""
 
         if let data = d.data(forKey: "hosts"), let h = try? JSONDecoder().decode([HostConfig].self, from: data) {

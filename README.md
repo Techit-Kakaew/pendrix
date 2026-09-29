@@ -51,9 +51,9 @@ Comments follow [conventionalcomments.org](https://conventionalcomments.org/): `
 
 Right-click a Jira row: move to any available status, comment, assign to me. MRs/PRs whose title or branch mention a Jira key (PAY-412) show that issue as a chip, and the issue shows its MRs.
 
-## Standup (parked)
+## Standup
 
-Built but hidden behind `Features.standup` (Sources/Pendrix/Features.swift). Yesterday / Today / Blockers from Jira changelog + GitLab/GitHub events, optional Claude or on-device spoken version in Thai/English. Flip the flag to bring it back.
+⌘⇧S (or the Standup button) opens Yesterday / Today / Blockers in the main window (Back / Esc returns): Jira moves and comments, pushes (one line per repo, tags ignored), MRs opened, reviews, merges, plus open work, review requests and blockers. Monday covers Friday. The spoken version comes from the Claude Code CLI by default (your login, Thai or English toggle) — Claude API key or on-device Apple Intelligence are alternatives in Settings → Standup. Edit, Copy (plain) or Copy Markdown. Optional weekday reminder.
 
 ## Review in-app
 

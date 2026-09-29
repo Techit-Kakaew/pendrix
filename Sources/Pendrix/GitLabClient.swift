@@ -107,6 +107,8 @@ struct GitLabHost: CodeHost {
             let text: String
             switch (e.action_name, e.target_type ?? "") {
             case ("pushed to", _), ("pushed new", _):
+                // tags (v1.14.0-rc.1) are release plumbing, not work
+                if e.push_data?.ref_type == "tag" || (e.push_data?.ref ?? "").range(of: "^v?\\d+\\.\\d+", options: .regularExpression) != nil { continue }
                 text = "pushed:\(e.push_data?.ref ?? "branch")"
             case ("opened", "MergeRequest"): text = "Opened MR \(title)"
             case ("approved", "MergeRequest"): text = "Approved \(title)"
@@ -126,7 +128,7 @@ struct GitLabHost: CodeHost {
         let action_name: String; let target_type: String?; let target_title: String?
         let project_id: Int?; let created_at: String?; let push_data: PushData?
     }
-    private struct PushData: Decodable { let ref: String?; let commit_count: Int? }
+    private struct PushData: Decodable { let ref: String?; let ref_type: String?; let commit_count: Int? }
     private struct ProjSimple: Decodable { let path_with_namespace: String }
 
     // MARK: detail

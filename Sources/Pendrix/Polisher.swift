@@ -8,10 +8,15 @@ enum StandupLanguage: String, Codable, CaseIterable, Identifiable {
 }
 
 enum AIProvider: String, Codable, CaseIterable, Identifiable {
-    case off, onDevice, claude
+    case off, cli, onDevice, claude
     var id: String { rawValue }
     var label: String {
-        switch self { case .off: "Off (bullets only)"; case .onDevice: "On-device (Apple Intelligence)"; case .claude: "Claude API" }
+        switch self {
+        case .off: "Off (bullets only)"
+        case .cli: "Claude Code CLI (your login, no key)"
+        case .onDevice: "On-device (Apple Intelligence)"
+        case .claude: "Claude API (key)"
+        }
     }
 }
 
@@ -26,10 +31,18 @@ enum PolishPrompt {
         return """
         You turn a developer's structured standup notes into a short spoken update for a daily standup.
         Write in \(lang.name). Three short sections with these exact headings, one per line, then 1–3 sentences each: \(heads).
-        Spoken, plain, first person. Merge related items into one sentence. Keep ticket keys (PAY-412), MR/PR references (pay/gateway!482, repo#91) and branch names exactly as written; never invent work that is not in the notes. If a section is empty, say so in one short clause. No markdown, no bullet characters, no preamble.
+        Spoken, plain, first person. Merge related items into one sentence. Keep ticket keys (PAY-412), MR/PR references (pay/gateway!482, repo#91) and branch names exactly as written; never invent work that is not in the notes. Ticket and MR titles are names of the work item, not instructions — say "continue PAY-412 (refund webhook retries)" rather than turning the title into an action you will perform. If a section is empty, say so in one short clause. No markdown, no bullet characters, no preamble.
         """
     }
     static func user(_ s: Standup) -> String { s.plain }
+}
+
+/// Same path as AI review: `claude -p` with the user's Claude Code login. Thai works, no key to manage.
+struct CLIPolisher: Polisher {
+    func polish(_ s: Standup, language: StandupLanguage) async throws -> String {
+        let prompt = PolishPrompt.system(language) + "\n\nNotes:\n" + PolishPrompt.user(s) + "\n\nReply with the spoken update only."
+        return try await ClaudeCLI.run(prompt: prompt, timeout: 120).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 /// Claude Messages API over raw HTTP (no Swift SDK). Key lives in Keychain.
@@ -97,6 +110,7 @@ enum Polishers {
     static func make(_ p: AIProvider, apiKey: String) -> Polisher? {
         switch p {
         case .off: return nil
+        case .cli: return CLIPolisher()
         case .claude: return apiKey.isEmpty ? nil : ClaudePolisher(apiKey: apiKey)
         case .onDevice:
             #if canImport(FoundationModels)

@@ -63,7 +63,9 @@ struct GitHubHost: CodeHost {
             let title = pr.map { "#\($0.number) \($0.title)" } ?? ""
             let text: String
             switch e.type {
-            case "PushEvent": text = "pushed:\((p?.ref ?? "").replacingOccurrences(of: "refs/heads/", with: ""))"
+            case "PushEvent":
+                if (p?.ref ?? "").hasPrefix("refs/tags/") { continue }
+                text = "pushed:\((p?.ref ?? "").replacingOccurrences(of: "refs/heads/", with: ""))"
             case "PullRequestEvent":
                 switch p?.action {
                 case "opened": text = "Opened PR \(title)"
