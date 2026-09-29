@@ -42,6 +42,8 @@ final class Config: ObservableObject {
     @Published var standupReminder: Bool { didSet { d.set(standupReminder, forKey: "standupReminder") } }
     /// Minutes after midnight, weekdays. Default 09:30.
     @Published var standupMinutes: Int { didSet { d.set(standupMinutes, forKey: "standupMinutes") } }
+    @Published var standupUseGit: Bool { didSet { d.set(standupUseGit, forKey: "standupUseGit") } }
+    @Published var standupUseClaude: Bool { didSet { d.set(standupUseClaude, forKey: "standupUseClaude") } }
     @Published var standupLanguage: StandupLanguage { didSet { d.set(standupLanguage.rawValue, forKey: "standupLanguage") } }
     @Published var aiProvider: AIProvider { didSet { d.set(aiProvider.rawValue, forKey: "aiProvider") } }
     @Published var anthropicKey: String { didSet { Keychain.set(anthropicKey, for: "anthropicKey") } }
@@ -68,6 +70,8 @@ final class Config: ObservableObject {
         updateRepo = d.string(forKey: "updateRepo") ?? "Techit-Kakaew/pendrix"
         standupReminder = d.object(forKey: "standupReminder") as? Bool ?? false
         standupMinutes = d.object(forKey: "standupMinutes") as? Int ?? (9 * 60 + 30)
+        standupUseGit = d.object(forKey: "standupUseGit") as? Bool ?? true
+        standupUseClaude = d.object(forKey: "standupUseClaude") as? Bool ?? true
         standupLanguage = StandupLanguage(rawValue: d.string(forKey: "standupLanguage") ?? "") ?? .th
         aiProvider = AIProvider(rawValue: d.string(forKey: "aiProvider") ?? "") ?? .cli
         anthropicKey = Keychain.get("anthropicKey") ?? ""

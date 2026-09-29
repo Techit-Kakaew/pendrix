@@ -78,4 +78,5 @@ enum RepoLocator {
     }
 
     static var indexedCount: Int { if !scanned { scan(); scanned = true }; return index.count }
+    static func allRepos() -> [String] { if !scanned { scan(); scanned = true }; return Array(Set(index.values)).sorted() }
 }

@@ -67,6 +67,7 @@ struct StandupView: View {
         Scrolling {
             GlassGroup(spacing: 12) {
                 VStack(spacing: 12) {
+                    notesBox
                     if let p = s.polished {
                         spoken(p)
                         Button(showBullets ? "Hide source bullets" : "Show source bullets") { withAnimation(.snappy(duration: 0.2)) { showBullets.toggle() } }
@@ -83,6 +84,18 @@ struct StandupView: View {
                 }
             }
         }
+    }
+
+    /// Anything the sources can't see (meetings, helping someone, decisions). Regenerate picks it up.
+    private var notesBox: some View {
+        HStack(spacing: 10) {
+            TextField("Add what the sources miss — meetings, pairing, decisions… then Regenerate", text: $hub.standupNotes, axis: .vertical)
+                .textFieldStyle(.plain).font(Type.meta).lineLimit(1...4)
+            if !hub.standupNotes.isEmpty {
+                Button("Regenerate") { Task { await hub.buildStandup() } }.buttonStyle(.plain).font(Type.meta).foregroundStyle(WorkItem.Tone.active.color)
+            }
+        }
+        .padding(12).frame(maxWidth: .infinity).glass()
     }
 
     /// The read-aloud version. Headings the model was told to emit get the section treatment.

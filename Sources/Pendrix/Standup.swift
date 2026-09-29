@@ -48,7 +48,11 @@ enum StandupBuilder {
         // one line per repo: "Pushed to feat/a, feat/b · repo" (main/master pushes are merges, usually already listed as Merged)
         var pushes: [String: [String]] = [:]
         var lines: [(Date, String)] = []
+        // uncommitted files only count for repos you actually touched in the window; stale scratch repos stay quiet
+        let activePlaces = Set(activity.filter { !$0.text.hasPrefix("wip:") }.map(\.place))
+        var wip: [String] = []
         for a in activity.sorted(by: { $0.date < $1.date }) {
+            if a.text.hasPrefix("wip:") { if activePlaces.contains(a.place) { wip.append("\(a.place) (\(a.text.dropFirst(4)) files)") }; continue }
             if a.text.hasPrefix("pushed:") {
                 let branch = String(a.text.dropFirst("pushed:".count))
                 if ["main", "master", "develop"].contains(branch) { continue }
@@ -62,6 +66,7 @@ enum StandupBuilder {
         }
         var seen = Set<String>()
         s.yesterday = lines.sorted { $0.0 < $1.0 }.map(\.1).filter { seen.insert($0).inserted }
+        if !wip.isEmpty { s.today.insert("Uncommitted work in \(wip.joined(separator: ", "))", at: 0) }
 
         // Today: what's in flight, what's waiting on me, what's wrong with mine.
         for j in jira where j.statusTone == .active {

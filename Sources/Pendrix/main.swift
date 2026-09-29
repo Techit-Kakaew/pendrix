@@ -77,6 +77,14 @@ if let i = CommandLine.arguments.firstIndex(of: "--deep-test"), i + 3 < CommandL
     RunLoop.main.run()
 }
 
+if CommandLine.arguments.contains("--local-test") {
+    // Debug: what the local sources (git + Claude Code prompts) would contribute since yesterday.
+    RepoLocator.configuredRoots = "~/Desktop/works"
+    let since = Standup.defaultSince()
+    for a in LocalActivity.gitCommits(since: since) + LocalActivity.claudePrompts(since: since) { print("\(a.date.relative)\t\(a.place)\t\(a.text.prefix(110))") }
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--polish-test") {
     // Debug: run the standup polisher (CLI provider) on the demo standup in Thai and English.
     Task { @MainActor in

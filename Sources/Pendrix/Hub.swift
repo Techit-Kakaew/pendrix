@@ -205,6 +205,8 @@ final class Hub: ObservableObject {
     // MARK: Standup
 
     @Published var standup: Standup?
+    /// Free text the user adds before generating ("ประชุมกับ PM เรื่อง scope", "ช่วย onboard น้องใหม่").
+    @Published var standupNotes = ""
     @Published var standupBusy = false
 
     func buildStandup() async {
@@ -217,6 +219,18 @@ final class Hub: ObservableObject {
         await withTaskGroup(of: [Activity].self) { g in
             for h in hosts { g.addTask { (try? await h.activity(since: since)) ?? [] } }
             for await a in g { acts += a }
+        }
+        RepoLocator.configuredRoots = config.repoRoots
+        let useGit = config.standupUseGit, useClaude = config.standupUseClaude
+        let local = await Task.detached(priority: .userInitiated) { () -> [Activity] in
+            var l: [Activity] = []
+            if useGit { l += LocalActivity.gitCommits(since: since) }
+            if useClaude { l += LocalActivity.claudePrompts(since: since) }
+            return l
+        }.value
+        acts += local
+        if !standupNotes.trimmingCharacters(in: .whitespaces).isEmpty {
+            acts.append(Activity(date: Date(), text: "Note from me: \(standupNotes)", place: ""))
         }
         standup = StandupBuilder.build(since: since, activity: acts, jira: jira, reviews: reviews, own: ownMRs)
         await polishStandup()

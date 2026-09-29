@@ -108,6 +108,8 @@ struct SettingsView: View {
                     displayedComponents: .hourAndMinute)
                 Text("Summary covers yesterday (Friday on Mondays): Jira moves and comments, pushes, MRs opened, reviews, merges.")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("Include local git commits (all clones under the AI review folders, unpushed too)", isOn: $config.standupUseGit)
+                Toggle("Include Claude Code prompts (~/.claude/history.jsonl)", isOn: $config.standupUseClaude)
                 Picker("Language", selection: $config.standupLanguage) {
                     ForEach(StandupLanguage.allCases) { Text($0.label).tag($0) }
                 }
