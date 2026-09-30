@@ -33,6 +33,8 @@ final class Config: ObservableObject {
     @Published var deepReview: Bool { didSet { d.set(deepReview, forKey: "deepReview") } }
     /// Start the AI pass as soon as a review request opens, so drafts arrive while you read.
     @Published var autoAIReview: Bool { didSet { d.set(autoAIReview, forKey: "autoAIReview") } }
+    /// Use a codegraph index (per repo, built on first review) as an MCP tool during deep review.
+    @Published var useCodeGraph: Bool { didSet { d.set(useCodeGraph, forKey: "useCodeGraph") } }
     // Updates
     @Published var autoUpdate: Bool { didSet { d.set(autoUpdate, forKey: "autoUpdate") } }
     /// GitHub "owner/repo" whose releases carry Pendrix-x.y.z.dmg + .dmg.sha256.
@@ -66,6 +68,7 @@ final class Config: ObservableObject {
         repoRoots = d.string(forKey: "repoRoots") ?? "~/Desktop/works"
         deepReview = d.object(forKey: "deepReview") as? Bool ?? true
         autoAIReview = d.object(forKey: "autoAIReview") as? Bool ?? true
+        useCodeGraph = d.object(forKey: "useCodeGraph") as? Bool ?? true
         autoUpdate = d.object(forKey: "autoUpdate") as? Bool ?? true
         updateRepo = d.string(forKey: "updateRepo") ?? "Techit-Kakaew/pendrix"
         standupReminder = d.object(forKey: "standupReminder") as? Bool ?? false

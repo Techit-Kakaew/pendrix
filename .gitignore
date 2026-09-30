@@ -3,3 +3,4 @@ dist/
 *.xcodeproj
 .swiftpm/
 .DS_Store
+.codegraph/

@@ -89,6 +89,15 @@ struct SettingsView: View {
             Section("AI review") {
                 Toggle("Start AI review automatically when opening a review request", isOn: $config.autoAIReview)
                 Toggle("Deep review when the repo is cloned locally", isOn: $config.deepReview)
+                Toggle("Use codegraph index during deep review (faster, fewer tool calls)", isOn: $config.useCodeGraph)
+                if CodeGraph.isInstalled {
+                    Text("codegraph found. Each repo is indexed on its first review (seconds to a minute), then synced incrementally.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    HStack {
+                        Text("codegraph not installed — install with:").font(.caption).foregroundStyle(.red)
+                        Text(CodeGraph.installCommand).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    }
+                }
                 TextField("Folders to scan for clones (comma-separated)", text: $config.repoRoots, prompt: Text("~/Desktop/works, ~/dev"))
                 Text("Deep review runs the claude CLI inside a temporary worktree of the repo with read-only tools (Read, Grep, Glob, git diff/log/show), so it can check callers and tests. Otherwise only the diff is sent. Nothing is posted without you.")
                     .font(.caption).foregroundStyle(.secondary)

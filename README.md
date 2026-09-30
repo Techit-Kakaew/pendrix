@@ -41,6 +41,8 @@ Filter (⌘F) or Settings → Inbox: hide drafts, hide bot authors, group by rep
 
 Deep review: when the MR's repo is cloned under one of the folders in Settings → AI review (default `~/Desktop/works`), Pendrix fetches both branches, adds a temporary detached worktree at the MR head and runs claude there with read-only tools (Read, Grep, Glob, `git diff/log/show/blame`) so findings are verified against callers and tests — the `/code-review` approach. Your checkout is never touched. Without a clone it falls back to diff-only.
 
+Speed: deep review keeps one persistent worktree per repo (`~/Library/Caches/Pendrix/review/`) and, when [codegraph](https://github.com/colbymchenry/codegraph) is installed (`npm i -g @colbymchenry/codegraph`), indexes it on first use and syncs incrementally after that. The graph is handed to claude as an MCP tool (`codegraph_explore`, callers, impact) so callers and blast radius are one call instead of a grep/read loop. Toggle in Settings → AI review.
+
 Pairing: the AI pass starts automatically when you open a review request (Settings → AI review), so drafts arrive while you read; files it found nothing in show `ai ✓`. Click a line number and press "Ask AI" (with or without a typed question) to get a focused answer about that line as a draft.
 
 ## Conventional Comments

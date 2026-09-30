@@ -35,13 +35,15 @@ enum ClaudeCLI {
     }
 
     /// Feeds `prompt` on stdin; returns the model's final text. Tools disabled, nothing persisted.
-    static func run(prompt: String, cwd: String? = nil, tools: [String] = [], allowed: [String] = [], timeout: TimeInterval = 240) async throws -> String {
+    static func run(prompt: String, cwd: String? = nil, tools: [String] = [], allowed: [String] = [], mcpConfig: String? = nil, timeout: TimeInterval = 240) async throws -> String {
         guard let exe = locate() else { throw APIError(message: "claude CLI not found — install Claude Code and run `claude` once to log in") }
         return try await withCheckedThrowingContinuation { cont in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: exe)
             var args = ["-p", "--output-format", "json", "--no-session-persistence", "--tools", tools.isEmpty ? "" : tools.joined(separator: ",")]
             if !allowed.isEmpty { args += ["--allowedTools", allowed.joined(separator: ",")] }
+            // Our own MCP set only: the user's global servers would otherwise load on every run (slower boot, unrelated tools).
+            if let mcpConfig { args += ["--mcp-config", mcpConfig, "--strict-mcp-config"] }
             p.arguments = args
             if let cwd { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
             var env = ProcessInfo.processInfo.environment
@@ -215,26 +217,33 @@ enum AIReviewer {
     // MARK: deep review inside the local clone
 
     static func deepReview(_ d: ChangeDetail, repo: String) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {
-        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Pendrix/worktrees", isDirectory: true)
+        // One persistent review worktree per repo: checkout moves to the MR head each run, so the codegraph index
+        // (untracked .codegraph/) survives and only syncs the delta. Serialized per repo.
+        let lock = reviewLock(for: repo); lock.lock(); defer { lock.unlock() }
+        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Pendrix/review", isDirectory: true)
         try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        // unique dir per run so concurrent reviews can't collide; prune leftovers from runs the app didn't finish
-        let wt = cache.appendingPathComponent("\(d.headSHA.prefix(8))-\(UUID().uuidString.prefix(6))").path
-        _ = try? git(repo, ["worktree", "prune"])
-        for stale in (try? FileManager.default.contentsOfDirectory(atPath: cache.path)) ?? [] {
-            _ = try? git(repo, ["worktree", "remove", "--force", cache.appendingPathComponent(stale).path])
-        }
-        // fetch both ends (updates origin/<branch>), then a detached worktree at head so the user's checkout never moves
+        let tag = String(repo.utf8.reduce(5381) { ($0 &* 33) &+ Int($1) } & 0xffffff, radix: 16)
+        let wt = cache.appendingPathComponent("\((repo as NSString).lastPathComponent)-\(tag)").path
         try git(repo, ["fetch", "--quiet", "origin", d.sourceBranch, d.targetBranch])
         let head = d.headSHA.isEmpty ? "origin/\(d.sourceBranch)" : d.headSHA
-        try git(repo, ["worktree", "add", "--detach", "--quiet", wt, head])
-        defer { _ = try? git(repo, ["worktree", "remove", "--force", wt]); _ = try? git(repo, ["worktree", "prune"]) }
+        if FileManager.default.fileExists(atPath: wt + "/.git") {
+            try git(wt, ["checkout", "--detach", "--quiet", "--force", head])
+        } else {
+            _ = try? git(repo, ["worktree", "prune"])
+            try git(repo, ["worktree", "add", "--detach", "--quiet", wt, head])
+        }
+        let useGraph = await MainActor.run { Config.shared.useCodeGraph }
+        let graphReady = useGraph && CodeGraph.ensureIndex(at: wt)
+        let mcp = graphReady ? CodeGraph.mcpConfig(for: wt) : nil
+        defer { if let mcp { try? FileManager.default.removeItem(atPath: mcp) } }
 
         let base = d.baseSHA.isEmpty ? "origin/\(d.targetBranch)" : d.baseSHA
         let existing = d.threads.flatMap(\.comments).map(\.body).joined(separator: "\n---\n")
         let prompt = """
         You are reviewing a merge request inside a checkout of the repository at its head commit. Work the way the /code-review skill does at high effort:
         1. Run `git diff \(base) HEAD --stat` then `git diff \(base) HEAD` to see the change.
-        2. For anything that looks wrong, READ the surrounding code (whole file, callers via Grep, existing tests) before deciding. Report only findings you verified in the code; drop suspicions that the context resolves.
+        \(graphReady ? "2. A pre-built code graph is available as the `codegraph_explore` tool (and codegraph_callers / codegraph_node). Use it FIRST for every changed or newly called symbol: it returns callers, callees, call paths and blast radius in one call. Fall back to Grep/Read only when the graph has no answer." : "2. For anything that looks wrong, READ the surrounding code (whole file, callers via Grep, existing tests) before deciding.")
+        Report only findings you verified in the code; drop suspicions that the context resolves.
         3. Look for: bugs, races, error handling, security, data loss, API/contract misuse, behaviour changes without tests, misleading names. Skip style a formatter handles.
         Do not modify files. Do not run the project's build or tests.
 
@@ -257,13 +266,21 @@ enum AIReviewer {
         """
         let raw = try await ClaudeCLI.run(prompt: prompt, cwd: wt,
                                           tools: ["Read", "Grep", "Glob", "Bash"],
-                                          allowed: ["Read", "Grep", "Glob", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git blame:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(wc:*)"],
-                                          timeout: 600)
+                                          allowed: ["Read", "Grep", "Glob", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git blame:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(wc:*)", "mcp__codegraph__*"],
+                                          mcpConfig: mcp, timeout: 600)
         let (summary, findings) = try parse(raw)
         return (summary, map(findings, to: d), [])
     }
 
     static let gitPath: String = ["/usr/bin/git", "/opt/homebrew/bin/git", "/usr/local/bin/git"].first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/git"
+
+    nonisolated(unsafe) private static var locks: [String: NSLock] = [:]
+    private static let locksGuard = NSLock()
+    private static func reviewLock(for repo: String) -> NSLock {
+        locksGuard.lock(); defer { locksGuard.unlock() }
+        if let l = locks[repo] { return l }
+        let l = NSLock(); locks[repo] = l; return l
+    }
 
     @discardableResult
     static func git(_ repo: String, _ args: [String]) throws -> String {
