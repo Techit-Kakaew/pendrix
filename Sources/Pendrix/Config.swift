@@ -35,6 +35,10 @@ final class Config: ObservableObject {
     @Published var autoAIReview: Bool { didSet { d.set(autoAIReview, forKey: "autoAIReview") } }
     /// Use a codegraph index (per repo, built on first review) as an MCP tool during deep review.
     @Published var useCodeGraph: Bool { didSet { d.set(useCodeGraph, forKey: "useCodeGraph") } }
+    /// claude -p speed knobs. Model "" = whatever Claude Code defaults to; "sonnet" is 2–3× faster.
+    @Published var aiModel: String { didSet { d.set(aiModel, forKey: "aiModel") } }
+    @Published var aiEffort: String { didSet { d.set(aiEffort, forKey: "aiEffort") } }
+    @Published var aiSkipUserHooks: Bool { didSet { d.set(aiSkipUserHooks, forKey: "aiSkipUserHooks") } }
     // Updates
     @Published var autoUpdate: Bool { didSet { d.set(autoUpdate, forKey: "autoUpdate") } }
     /// GitHub "owner/repo" whose releases carry Pendrix-x.y.z.dmg + .dmg.sha256.
@@ -69,6 +73,9 @@ final class Config: ObservableObject {
         deepReview = d.object(forKey: "deepReview") as? Bool ?? true
         autoAIReview = d.object(forKey: "autoAIReview") as? Bool ?? true
         useCodeGraph = d.object(forKey: "useCodeGraph") as? Bool ?? true
+        aiModel = d.string(forKey: "aiModel") ?? "sonnet"
+        aiEffort = d.string(forKey: "aiEffort") ?? "medium"
+        aiSkipUserHooks = d.object(forKey: "aiSkipUserHooks") as? Bool ?? true
         autoUpdate = d.object(forKey: "autoUpdate") as? Bool ?? true
         updateRepo = d.string(forKey: "updateRepo") ?? "Techit-Kakaew/pendrix"
         standupReminder = d.object(forKey: "standupReminder") as? Bool ?? false

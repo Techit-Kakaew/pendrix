@@ -34,8 +34,42 @@ enum ClaudeCLI {
         return s.isEmpty ? nil : s
     }
 
+    /// Metadata from the last run, for the "where did the time go" line.
+    struct Stats { var durationMs = 0; var turns = 0; var tokens = 0; var costUSD = 0.0
+        var line: String {
+            var p: [String] = []
+            if durationMs > 0 { p.append(durationMs >= 60_000 ? "\(durationMs / 60_000)m \((durationMs % 60_000) / 1000)s" : "\(durationMs / 1000)s") }
+            if turns > 0 { p.append("\(turns) turns") }
+            if tokens > 0 { p.append(tokens >= 1000 ? "\(tokens / 1000)k tok" : "\(tokens) tok") }
+            return p.joined(separator: " · ")
+        }
+    }
+    nonisolated(unsafe) static var lastStats = Stats()
+
+    /// `{"mcpServers":{}}` on disk, written once.
+    static let emptyMCPConfig: String = {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("pendrix-mcp-empty.json")
+        try? Data("{\"mcpServers\":{}}".utf8).write(to: url)
+        return url.path
+    }()
+
+    /// Per-run speed knobs from Settings: model alias ("" = your Claude Code default), effort, and whether user hooks load.
+    @MainActor static func speedArgs() -> [String] {
+        let c = Config.shared
+        var a: [String] = []
+        if !c.aiModel.isEmpty { a += ["--model", c.aiModel] }
+        if !c.aiEffort.isEmpty { a += ["--effort", c.aiEffort] }
+        if c.aiSkipUserHooks { a += ["--setting-sources", "project,local"] }   // user hooks (rtk, caveman…) spawn a process per tool call
+        return a
+    }
+
     /// Feeds `prompt` on stdin; returns the model's final text. Tools disabled, nothing persisted.
     static func run(prompt: String, cwd: String? = nil, tools: [String] = [], allowed: [String] = [], mcpConfig: String? = nil, timeout: TimeInterval = 240) async throws -> String {
+        let speed = await speedArgs()
+        return try await run(prompt: prompt, cwd: cwd, tools: tools, allowed: allowed, mcpConfig: mcpConfig, extra: speed, timeout: timeout)
+    }
+
+    static func run(prompt: String, cwd: String?, tools: [String], allowed: [String], mcpConfig: String?, extra: [String], timeout: TimeInterval) async throws -> String {
         guard let exe = locate() else { throw APIError(message: "claude CLI not found — install Claude Code and run `claude` once to log in") }
         return try await withCheckedThrowingContinuation { cont in
             let p = Process()
@@ -43,7 +77,9 @@ enum ClaudeCLI {
             var args = ["-p", "--output-format", "json", "--no-session-persistence", "--tools", tools.isEmpty ? "" : tools.joined(separator: ",")]
             if !allowed.isEmpty { args += ["--allowedTools", allowed.joined(separator: ",")] }
             // Our own MCP set only: the user's global servers would otherwise load on every run (slower boot, unrelated tools).
-            if let mcpConfig { args += ["--mcp-config", mcpConfig, "--strict-mcp-config"] }
+            // Always strict: without it claude boots every MCP server configured on this Mac (Atlassian, Figma, browsers…) per run.
+            args += ["--mcp-config", mcpConfig ?? emptyMCPConfig, "--strict-mcp-config"]
+            args += extra
             p.arguments = args
             if let cwd { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
             var env = ProcessInfo.processInfo.environment
@@ -63,6 +99,15 @@ enum ClaudeCLI {
                 outData.append(outPipe.fileHandleForReading.readDataToEndOfFile())
                 errData.append(errPipe.fileHandleForReading.readDataToEndOfFile())
                 if let j = try? JSONSerialization.jsonObject(with: outData) as? [String: Any], let r = j["result"] as? String, !(j["is_error"] as? Bool ?? false) {
+                    var st = Stats()
+                    st.durationMs = (j["duration_ms"] as? Int) ?? 0
+                    st.turns = (j["num_turns"] as? Int) ?? 0
+                    st.costUSD = (j["total_cost_usd"] as? Double) ?? 0
+                    if let u = j["usage"] as? [String: Any] {
+                        st.tokens = ((u["input_tokens"] as? Int) ?? 0) + ((u["output_tokens"] as? Int) ?? 0)
+                            + ((u["cache_read_input_tokens"] as? Int) ?? 0) + ((u["cache_creation_input_tokens"] as? Int) ?? 0)
+                    }
+                    lastStats = st
                     cont.resume(returning: r); return
                 }
                 let err = String(decoding: errData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -152,7 +197,8 @@ enum AIReviewer {
 
         Rules:
         - Report real problems: bugs, races, security, data loss, error handling, API misuse, missing tests for risky logic, misleading names. Skip style that a formatter handles.
-        - At most 12 findings, most important first. If the change is fine, return an empty findings array and say so in summary.
+        - At most 8 findings, most important first. If the change is fine, return an empty findings array and say so in summary.
+        - Be terse: "summary" ≤ 2 sentences; "discussion" ≤ 2 sentences (plus a code block only when it changes the outcome). Total output well under 400 words.
         - "line" MUST be a number that appears in the diff below: use the number after "+" or " " for side "new", the number after "-" for side "old".
         - "discussion" is direct and specific, 1–4 sentences, with a concrete fix when possible. Use markdown sparingly; fenced code for code.
         - Write in Thai if the MR title/description or existing comments are mostly Thai, otherwise in English. Keep identifiers, paths and code in their original form.
@@ -171,6 +217,7 @@ enum AIReviewer {
         """
         let raw = try await ClaudeCLI.run(prompt: prompt)
         let (summary, findings) = try parse(raw)
+        lastTiming = "claude \(ClaudeCLI.lastStats.line)"
         return (summary, map(findings, to: d), skipped)
     }
 
@@ -232,8 +279,10 @@ enum AIReviewer {
             _ = try? git(repo, ["worktree", "prune"])
             try git(repo, ["worktree", "add", "--detach", "--quiet", wt, head])
         }
+        let t0 = Date()
         let useGraph = await MainActor.run { Config.shared.useCodeGraph }
         let graphReady = useGraph && CodeGraph.ensureIndex(at: wt)
+        let prepMs = Int(Date().timeIntervalSince(t0) * 1000)
         let mcp = graphReady ? CodeGraph.mcpConfig(for: wt) : nil
         defer { if let mcp { try? FileManager.default.removeItem(atPath: mcp) } }
 
@@ -244,6 +293,7 @@ enum AIReviewer {
         1. Run `git diff \(base) HEAD --stat` then `git diff \(base) HEAD` to see the change.
         \(graphReady ? "2. A pre-built code graph is available as the `codegraph_explore` tool (and codegraph_callers / codegraph_node). Use it FIRST for every changed or newly called symbol: it returns callers, callees, call paths and blast radius in one call. Fall back to Grep/Read only when the graph has no answer." : "2. For anything that looks wrong, READ the surrounding code (whole file, callers via Grep, existing tests) before deciding.")
         Report only findings you verified in the code; drop suspicions that the context resolves.
+        Speed matters: issue independent tool calls together in ONE turn (several Read/Grep/codegraph calls at once), never one at a time. Budget: about 12 tool calls in total; stop exploring once the changed code and its direct callers/tests are covered.
         3. Look for: bugs, races, error handling, security, data loss, API/contract misuse, behaviour changes without tests, misleading names. Skip style a formatter handles.
         Do not modify files. Do not run the project's build or tests.
 
@@ -251,8 +301,8 @@ enum AIReviewer {
         {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "label": string, "decorations": [string], "subject": string, "discussion": string}]}
         Comments follow conventionalcomments.org. "label" ∈ praise, nitpick, suggestion, issue, todo, question, thought, chore, note, typo, polish, quibble. "decorations" ⊆ ["blocking", "non-blocking", "if-minor"]; "blocking" only for must-fix-before-merge. "subject" = one short sentence; "discussion" = reasoning + concrete fix (empty allowed). Posted verbatim as "<label> (<decorations>): <subject>\\n\\n<discussion>". At most one praise, only if earned.
         - "path" is the repo-relative path. "line" for side "new" is the line number in the HEAD version of the file; for side "old" it is the line number in the base version. Only reference lines that are part of the diff hunks.
-        - At most 12 findings, most important first. Empty findings if the change is fine; say so in summary.
-        - "discussion" is direct and specific, 1–4 sentences, concrete fix when possible, fenced code for code.
+        - At most 8 findings, most important first. Empty findings if the change is fine; say so in summary.
+        - Be terse: "summary" ≤ 2 sentences; "discussion" ≤ 2 sentences, a fenced code block only when it changes the outcome. Total output well under 400 words.
         - Write in Thai if the MR title/description or existing comments are mostly Thai, otherwise English. Keep identifiers, paths and code verbatim.
         - Do not repeat points already in existing comments.
 
@@ -269,8 +319,10 @@ enum AIReviewer {
                                           allowed: ["Read", "Grep", "Glob", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git blame:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(wc:*)", "mcp__codegraph__*"],
                                           mcpConfig: mcp, timeout: 600)
         let (summary, findings) = try parse(raw)
+        lastTiming = "\(graphReady ? "codegraph" : "grep") · prep \(prepMs / 1000)s · claude \(ClaudeCLI.lastStats.line)"
         return (summary, map(findings, to: d), [])
     }
+    nonisolated(unsafe) static var lastTiming = ""
 
     static let gitPath: String = ["/usr/bin/git", "/opt/homebrew/bin/git", "/usr/local/bin/git"].first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/git"
 

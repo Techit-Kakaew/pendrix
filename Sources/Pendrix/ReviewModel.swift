@@ -28,6 +28,7 @@ final class ReviewModel: ObservableObject {
     @Published var aiRunning = false
     @Published var aiError: String?
     @Published var aiMode: AIReviewer.Mode? = nil
+    @Published var aiTiming = ""
     @Published var askingAt: LineAnchor? = nil
     var aiAutoStarted = false
 
@@ -59,6 +60,7 @@ final class ReviewModel: ObservableObject {
         do {
             let r = try await AIReviewer.review(d)
             aiSummary = r.summary; aiDrafts = r.drafts; aiSkipped = r.skipped; aiMode = r.mode
+            aiTiming = AIReviewer.lastTiming
             showDrafts = true; selectedFile = nil
             persistAI()
         } catch { aiError = error.localizedDescription }

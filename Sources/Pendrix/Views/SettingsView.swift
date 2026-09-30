@@ -89,6 +89,13 @@ struct SettingsView: View {
             Section("AI review") {
                 Toggle("Start AI review automatically when opening a review request", isOn: $config.autoAIReview)
                 Toggle("Deep review when the repo is cloned locally", isOn: $config.deepReview)
+                Picker("Model", selection: $config.aiModel) {
+                    Text("sonnet — fast").tag("sonnet"); Text("opus — thorough").tag("opus"); Text("Claude Code default").tag("")
+                }
+                Picker("Effort", selection: $config.aiEffort) {
+                    Text("low").tag("low"); Text("medium").tag("medium"); Text("high").tag("high"); Text("xhigh").tag("xhigh")
+                }
+                Toggle("Skip your Claude Code user hooks during reviews (faster tool calls)", isOn: $config.aiSkipUserHooks)
                 Toggle("Use codegraph index during deep review (faster, fewer tool calls)", isOn: $config.useCodeGraph)
                 if CodeGraph.isInstalled {
                     Text("codegraph found. Each repo is indexed on its first review (seconds to a minute), then synced incrementally.").font(.caption).foregroundStyle(.secondary)

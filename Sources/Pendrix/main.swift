@@ -71,6 +71,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--deep-test"), i + 3 < CommandL
         do {
             let r = try await AIReviewer.deepReview(d, repo: repo)
             print("summary:", r.summary); for x in r.drafts { print("- [\(x.severity.rawValue)] \(x.path ?? "-"):\(x.anchor?.newLine ?? 0) \(x.title)") }
+            print("timing:", AIReviewer.lastTiming)
         } catch { print("ERROR:", error.localizedDescription) }
         exit(0)
     }
@@ -104,7 +105,7 @@ if CommandLine.arguments.contains("--ai-test") {
             let r = try await AIReviewer.review(Hub.demoDetail())
             print("summary:", r.summary)
             for d in r.drafts { print("- [\(d.severity.rawValue)] \(d.path ?? "-"):\(d.anchor?.newLine ?? d.anchor?.oldLine ?? 0) \(d.title)\n    \(d.body.prefix(160))") }
-            print("skipped:", r.skipped)
+            print("skipped:", r.skipped, "| timing:", AIReviewer.lastTiming)
         } catch { print("ERROR:", error.localizedDescription) }
         exit(0)
     }

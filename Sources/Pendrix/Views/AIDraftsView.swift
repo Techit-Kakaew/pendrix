@@ -45,8 +45,8 @@ struct AIDraftsView: View {
         HStack(alignment: .firstTextBaseline) {
             Text("AI DRAFTS").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
             switch model.aiMode {
-            case .deep(let repo): Text("Deep review · \((repo as NSString).abbreviatingWithTildeInPath)").font(Type.meta).foregroundStyle(WorkItem.Tone.done.color)
-            case .diffOnly: Text("Diff-only · no local clone found under \(RepoLocator.configuredRoots)").font(Type.meta).foregroundStyle(.tertiary)
+            case .deep(let repo): Text("Deep review · \((repo as NSString).lastPathComponent)\(model.aiTiming.isEmpty ? "" : " · " + model.aiTiming)").font(Type.meta).foregroundStyle(WorkItem.Tone.done.color).lineLimit(1)
+            case .diffOnly: Text("Diff-only · no clone under \(RepoLocator.configuredRoots)\(model.aiTiming.isEmpty ? "" : " · " + model.aiTiming)").font(Type.meta).foregroundStyle(.tertiary).lineLimit(1)
             case nil: Text("Suggestions from Claude. Edit freely; only Post sends anything.").font(Type.meta).foregroundStyle(.tertiary)
             }
             Spacer()
