@@ -37,7 +37,7 @@ Filter (⌘F) or Settings → Inbox: hide drafts, hide bot authors, group by rep
 
 ## AI review (drafts only)
 
-"AI review" in the review header runs the Claude Code CLI (`claude -p`, tools disabled, nothing persisted) on the MR diff using your existing Claude login — no API key. Findings come back as drafts: under their lines in the diff and in an "AI drafts" worklist with the summary. Edit, Post (Touch ID), or Dismiss each one; nothing is sent until you press Post. Generated/lock files and very large files are skipped. Comment language follows the MR (Thai if the MR is in Thai).
+"AI review" in the review header runs the Claude Code CLI (`claude -p`, tools disabled, nothing persisted) on the MR diff using your existing Claude login — no API key. Findings come back as drafts: under their lines in the diff and in an "AI drafts" worklist with the summary. Edit, Post (Touch ID), or Dismiss each one; nothing is sent until you press Post. Generated/lock files and very large files are skipped. Comment language follows the MR (Thai if the MR is in Thai). Optionally (off by default; Settings → AI review or the "Read tickets" checkbox on the AI drafts screen) the linked Jira tickets are pulled into the prompt so the review also checks the change against what was asked for.
 
 Deep review: when the MR's repo is cloned under one of the folders in Settings → AI review (default `~/Desktop/works`), Pendrix fetches both branches, adds a temporary detached worktree at the MR head and runs claude there with read-only tools (Read, Grep, Glob, `git diff/log/show/blame`) so findings are verified against callers and tests — the `/code-review` approach. Your checkout is never touched. Without a clone it falls back to diff-only.
 
