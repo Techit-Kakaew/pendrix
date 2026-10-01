@@ -342,9 +342,9 @@ final class Hub: ObservableObject {
 
     // MARK: Jira ↔ MR linking
 
-    private static let keyRegex = try! NSRegularExpression(pattern: "\\b[A-Z][A-Z0-9]{1,9}-[0-9]+\\b")
+    nonisolated private static let keyRegex = try! NSRegularExpression(pattern: "\\b[A-Z][A-Z0-9]{1,9}-[0-9]+\\b")
 
-    static func jiraKeys(in text: String) -> [String] {
+    nonisolated static func jiraKeys(in text: String) -> [String] {
         let ns = text as NSString
         var seen = Set<String>(); var out: [String] = []
         for m in keyRegex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
