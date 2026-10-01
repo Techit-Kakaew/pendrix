@@ -199,6 +199,7 @@ enum AIReviewer {
         - Report real problems: bugs, races, security, data loss, error handling, API misuse, missing tests for risky logic, misleading names. Skip style that a formatter handles.
         - At most 8 findings, most important first. If the change is fine, return an empty findings array and say so in summary.
         - Be terse: "summary" ≤ 2 sentences; "discussion" ≤ 2 sentences (plus a code block only when it changes the outcome). Total output well under 400 words.
+        - "path" MUST be the full repo-relative path exactly as written after "###" below (never just the file name — many files share one).
         - "line" MUST be a number that appears in the diff below: use the number after "+" or " " for side "new", the number after "-" for side "old".
         - "discussion" is direct and specific, 1–4 sentences, with a concrete fix when possible. Use markdown sparingly; fenced code for code.
         - Write in Thai if the MR title/description or existing comments are mostly Thai, otherwise in English. Keep identifiers, paths and code in their original form.
@@ -300,7 +301,7 @@ enum AIReviewer {
         Output ONLY a JSON object at the end, no prose around it, no markdown fences:
         {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "label": string, "decorations": [string], "subject": string, "discussion": string}]}
         Comments follow conventionalcomments.org. "label" ∈ praise, nitpick, suggestion, issue, todo, question, thought, chore, note, typo, polish, quibble. "decorations" ⊆ ["blocking", "non-blocking", "if-minor"]; "blocking" only for must-fix-before-merge. "subject" = one short sentence; "discussion" = reasoning + concrete fix (empty allowed). Posted verbatim as "<label> (<decorations>): <subject>\\n\\n<discussion>". At most one praise, only if earned.
-        - "path" is the repo-relative path. "line" for side "new" is the line number in the HEAD version of the file; for side "old" it is the line number in the base version. Only reference lines that are part of the diff hunks.
+        - "path" is the FULL repo-relative path exactly as `git diff` prints it (never just the file name — many files share one). "line" for side "new" is the line number in the HEAD version of the file; for side "old" it is the line number in the base version. Only reference lines that are part of the diff hunks.
         - At most 8 findings, most important first. Empty findings if the change is fine; say so in summary.
         - Be terse: "summary" ≤ 2 sentences; "discussion" ≤ 2 sentences, a fenced code block only when it changes the outcome. Total output well under 400 words.
         - Write in Thai if the MR title/description or existing comments are mostly Thai, otherwise English. Keep identifiers, paths and code verbatim.
@@ -357,10 +358,32 @@ enum AIReviewer {
                        title: f.subject ?? f.title ?? "", body: f.discussion ?? f.body ?? "")
     }
 
+    /// Exact path first. Otherwise, among files sharing the suffix/basename (many `index.tsx`), prefer the one that
+    /// actually has that line and mentions an identifier from the comment.
+    private static func resolveFile(_ f: Finding, in d: ChangeDetail) -> FileDiff? {
+        if let exact = d.files.first(where: { $0.path == f.path }) { return exact }
+        let want = (f.path as NSString).lastPathComponent
+        let candidates = d.files.filter { $0.path.hasSuffix("/" + f.path) || $0.path.hasSuffix(f.path) || ($0.path as NSString).lastPathComponent == want }
+        if candidates.count <= 1 { return candidates.first }
+        let text = ((f.subject ?? f.title ?? "") + " " + (f.discussion ?? f.body ?? ""))
+        let idents = Set(text.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_")).inverted)
+            .filter { $0.count >= 4 && $0.rangeOfCharacter(from: .letters) != nil })
+        func score(_ file: FileDiff) -> Int {
+            let lines = file.hunks.flatMap(\.lines)
+            var s = 0
+            if lines.contains(where: { $0.newNo == f.line || $0.oldNo == f.line }) { s += 2 }
+            let around = lines.filter { abs(($0.newNo ?? -99) - f.line) <= 8 }.map(\.text).joined(separator: "\n")
+            if idents.contains(where: { around.contains($0) }) { s += 4 }
+            else if idents.contains(where: { ident in lines.contains { $0.text.contains(ident) } }) { s += 1 }
+            return s
+        }
+        return candidates.max { score($0) < score($1) }
+    }
+
     private static func map(_ findings: [Finding], to d: ChangeDetail) -> [AIDraft] {
         findings.map { f -> AIDraft in
             var anchor: LineAnchor? = nil
-            if let file = d.files.first(where: { $0.path == f.path || $0.path.hasSuffix(f.path) }) {
+            if let file = resolveFile(f, in: d) {
                 let lines = file.hunks.flatMap(\.lines)
                 if f.side == "old", let l = lines.first(where: { $0.kind == .del && $0.oldNo == f.line }) {
                     anchor = LineAnchor(path: file.path, oldLine: l.oldNo, newLine: nil)
