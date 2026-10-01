@@ -98,6 +98,40 @@ struct JiraClient {
     private struct ChangeItem: Decodable { let field: String; let toString: String? }
     private struct Acct: Decodable { let accountId: String? }
 
+    // MARK: ticket context for AI review
+
+    /// Summary, type, status, parent and description (ADF flattened to text) — what the reviewer would read on the ticket.
+    func issueText(_ key: String) async throws -> String {
+        let d = try await request("GET", "rest/api/3/issue/\(key)?fields=summary,description,issuetype,status,parent,priority")
+        guard let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let f = o["fields"] as? [String: Any] else { return "" }
+        var out = "\(key): \((f["summary"] as? String) ?? "")"
+        if let t = (f["issuetype"] as? [String: Any])?["name"] as? String { out += " [\(t)]" }
+        if let s = (f["status"] as? [String: Any])?["name"] as? String { out += " — \(s)" }
+        if let p = f["parent"] as? [String: Any], let pk = p["key"] as? String {
+            out += "\nParent: \(pk) \(((p["fields"] as? [String: Any])?["summary"] as? String) ?? "")"
+        }
+        let desc = Self.flattenADF(f["description"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !desc.isEmpty { out += "\n\(String(desc.prefix(4000)))" }
+        return out
+    }
+
+    /// Atlassian Document Format → readable text (paragraphs, lists, headings, code).
+    static func flattenADF(_ node: Any?) -> String {
+        guard let n = node as? [String: Any] else { return "" }
+        let type = n["type"] as? String ?? ""
+        let children = (n["content"] as? [[String: Any]]) ?? []
+        switch type {
+        case "text": return (n["text"] as? String) ?? ""
+        case "hardBreak": return "\n"
+        case "mention": return "@" + (((n["attrs"] as? [String: Any])?["text"] as? String) ?? "")
+        case "paragraph", "heading": return children.map { flattenADF($0) }.joined() + "\n"
+        case "listItem": return "- " + children.map { flattenADF($0) }.joined()
+        case "codeBlock": return "```\n" + children.map { flattenADF($0) }.joined() + "\n```\n"
+        case "taskItem": return "- [\(((n["attrs"] as? [String: Any])?["state"] as? String) == "DONE" ? "x" : " ")] " + children.map { flattenADF($0) }.joined() + "\n"
+        default: return children.map { flattenADF($0) }.joined()
+        }
+    }
+
     // MARK: actions
 
     struct Transition: Identifiable, Hashable { let id: String; let name: String; let toStatus: String }

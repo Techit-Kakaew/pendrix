@@ -154,6 +154,20 @@ enum AIReviewer {
     }
 
     /// Deep when a local clone exists and the setting is on: a detached worktree at the MR head, claude with read-only tools.
+    /// Linked Jira tickets as text, when the user opted in and Jira is configured.
+    static func ticketContext(for d: ChangeDetail) async -> String {
+        let (on, ready, site, email, token) = await MainActor.run {
+            (Config.shared.aiReadTickets, Config.shared.jiraReady, Config.shared.jiraURL, Config.shared.jiraEmail, Config.shared.jiraToken)
+        }
+        guard on, ready, let site else { return "" }
+        let keys = Hub.jiraKeys(in: d.title + " " + d.sourceBranch + " " + d.description).prefix(3)
+        guard !keys.isEmpty else { return "" }
+        let client = JiraClient(base: site, email: email, token: token)
+        var parts: [String] = []
+        for k in keys { if let t = try? await client.issueText(k), !t.isEmpty { parts.append(t) } }
+        return parts.joined(separator: "\n\n")
+    }
+
     static func review(_ d: ChangeDetail) async throws -> (summary: String, drafts: [AIDraft], skipped: [String], mode: Mode) {
         let (deep, roots) = await MainActor.run { (Config.shared.deepReview, Config.shared.repoRoots) }
         RepoLocator.configuredRoots = roots
@@ -186,6 +200,7 @@ enum AIReviewer {
             diffText += s + "\n"
         }
         let existing = d.threads.flatMap(\.comments).map(\.body).joined(separator: "\n---\n")
+        let tickets = await ticketContext(for: d)
         let prompt = """
         You are a senior engineer reviewing a merge request. Do not use tools. Output ONLY a JSON object, no prose, no markdown fences:
         {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "label": string, "decorations": [string], "subject": string, "discussion": string}]}
@@ -212,7 +227,7 @@ enum AIReviewer {
 
         Existing comments:
         \(existing.isEmpty ? "(none)" : existing)
-
+        \(tickets.isEmpty ? "" : "\nLinked Jira tickets (what was asked for — check the change actually delivers it, flag scope gaps or extras as findings):\n" + tickets + "\n")
         Diff (format: <sign><line number>| <code>):
         \(diffText)
         """
@@ -289,6 +304,7 @@ enum AIReviewer {
 
         let base = d.baseSHA.isEmpty ? "origin/\(d.targetBranch)" : d.baseSHA
         let existing = d.threads.flatMap(\.comments).map(\.body).joined(separator: "\n---\n")
+        let tickets = await ticketContext(for: d)
         let prompt = """
         You are reviewing a merge request inside a checkout of the repository at its head commit. Work the way the /code-review skill does at high effort:
         1. Run `git diff \(base) HEAD --stat` then `git diff \(base) HEAD` to see the change.
@@ -314,6 +330,7 @@ enum AIReviewer {
 
         Existing comments:
         \(existing.isEmpty ? "(none)" : existing)
+        \(tickets.isEmpty ? "" : "\nLinked Jira tickets (what was asked for — check the change actually delivers it, flag scope gaps or extras as findings):\n" + tickets)
         """
         let raw = try await ClaudeCLI.run(prompt: prompt, cwd: wt,
                                           tools: ["Read", "Grep", "Glob", "Bash"],

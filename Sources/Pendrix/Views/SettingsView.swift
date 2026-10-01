@@ -97,6 +97,7 @@ struct SettingsView: View {
                 }
                 Toggle("Skip your Claude Code user hooks during reviews (faster tool calls)", isOn: $config.aiSkipUserHooks)
                 Toggle("Use codegraph index during deep review (faster, fewer tool calls)", isOn: $config.useCodeGraph)
+                Toggle("Read linked Jira tickets (MAR-123 in title/branch) and check the change against them", isOn: $config.aiReadTickets)
                 if CodeGraph.isInstalled {
                     Text("codegraph found. Each repo is indexed on its first review (seconds to a minute), then synced incrementally.").font(.caption).foregroundStyle(.secondary)
                 } else {

@@ -35,6 +35,8 @@ final class Config: ObservableObject {
     @Published var autoAIReview: Bool { didSet { d.set(autoAIReview, forKey: "autoAIReview") } }
     /// Use a codegraph index (per repo, built on first review) as an MCP tool during deep review.
     @Published var useCodeGraph: Bool { didSet { d.set(useCodeGraph, forKey: "useCodeGraph") } }
+    /// Pull linked Jira tickets (keys in the MR title/branch) into the review prompt. Off by default: slower, and not every MR needs it.
+    @Published var aiReadTickets: Bool { didSet { d.set(aiReadTickets, forKey: "aiReadTickets") } }
     /// claude -p speed knobs. Model "" = whatever Claude Code defaults to; "sonnet" is 2–3× faster.
     @Published var aiModel: String { didSet { d.set(aiModel, forKey: "aiModel") } }
     @Published var aiEffort: String { didSet { d.set(aiEffort, forKey: "aiEffort") } }
@@ -73,6 +75,7 @@ final class Config: ObservableObject {
         deepReview = d.object(forKey: "deepReview") as? Bool ?? true
         autoAIReview = d.object(forKey: "autoAIReview") as? Bool ?? true
         useCodeGraph = d.object(forKey: "useCodeGraph") as? Bool ?? true
+        aiReadTickets = d.object(forKey: "aiReadTickets") as? Bool ?? false
         aiModel = d.string(forKey: "aiModel") ?? "sonnet"
         aiEffort = d.string(forKey: "aiEffort") ?? "medium"
         aiSkipUserHooks = d.object(forKey: "aiSkipUserHooks") as? Bool ?? true

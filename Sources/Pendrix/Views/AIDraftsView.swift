@@ -50,6 +50,9 @@ struct AIDraftsView: View {
             case nil: Text("Suggestions from Claude. Edit freely; only Post sends anything.").font(Type.meta).foregroundStyle(.tertiary)
             }
             Spacer()
+            Toggle("Read tickets", isOn: Binding(get: { Config.shared.aiReadTickets }, set: { Config.shared.aiReadTickets = $0 }))
+                .toggleStyle(.checkbox).font(Type.meta).foregroundStyle(.secondary)
+                .help("Pull the linked Jira tickets into the prompt and check the change against them (slower).")
             Button(model.aiRunning ? "Running…" : "Run again") { Task { await model.runAIReview() } }
                 .buttonStyle(.plain).font(Type.meta).foregroundStyle(.secondary).disabled(model.aiRunning)
             if !model.pendingDrafts.isEmpty {
