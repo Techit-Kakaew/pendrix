@@ -40,7 +40,7 @@ final class ReviewModel: ObservableObject {
 
     func ask(_ question: String, at line: DiffLine, in file: FileDiff) async {
         guard let d = detail else { return }
-        let anchor = LineAnchor(path: file.path, oldLine: line.kind == .del ? line.oldNo : nil, newLine: line.kind == .del ? nil : line.newNo)
+        let anchor = AIReviewer.anchor(for: line, path: file.path)
         askingAt = anchor; composing = nil
         defer { askingAt = nil }
         do {
@@ -109,7 +109,11 @@ final class ReviewModel: ObservableObject {
         guard await Auth.require("Pendrix: post comment on \(d.title)") else { return }
         busy = true
         do {
-            try await host.comment(ref, at: draft.anchor, body: body, detail: d)
+            do { try await host.comment(ref, at: draft.anchor, body: body, detail: d) }
+            catch let e as APIError where e.message.contains("line_code") || e.message.contains("HTTP 400") {
+                let fresh = try await host.detail(ref); detail = fresh
+                try await host.comment(ref, at: draft.anchor, body: body, detail: fresh)
+            }
             if let i = aiDrafts.firstIndex(where: { $0.id == draft.id }) { aiDrafts[i].posted = true }
             persistAI()
             flash = "Comment posted"; error = nil
@@ -278,7 +282,15 @@ final class ReviewModel: ObservableObject {
     func comment(_ body: String, at anchor: LineAnchor?) async {
         guard let host, let d = detail, !body.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         composing = nil
-        await perform("Comment posted") { try await host.comment(self.ref, at: anchor, body: body, detail: d) }
+        await perform("Comment posted") {
+            do { try await host.comment(self.ref, at: anchor, body: body, detail: d) }
+            catch let e as APIError where e.message.contains("line_code") || e.message.contains("HTTP 400") {
+                // position rejected: usually SHAs moved after a push — reload and try once with fresh refs
+                let fresh = try await host.detail(self.ref)
+                await MainActor.run { self.detail = fresh }
+                try await host.comment(self.ref, at: anchor, body: body, detail: fresh)
+            }
+        }
     }
     func reply(_ body: String, to thread: ReviewThread) async {
         guard let host, !body.trimmingCharacters(in: .whitespaces).isEmpty else { return }

@@ -152,8 +152,13 @@ struct DiffView: View {
         .background(Capsule().fill(.primary.opacity(searchFocused || model.searchActive ? 0.08 : 0.04)))
     }
 
+    /// GitLab needs old+new for unchanged lines, new only for additions, old only for deletions.
     private func anchor(_ l: DiffLine) -> LineAnchor {
-        LineAnchor(path: file.path, oldLine: l.kind == .del ? l.oldNo : (l.newNo == nil ? l.oldNo : nil), newLine: l.kind == .del ? nil : l.newNo)
+        switch l.kind {
+        case .add: return LineAnchor(path: file.path, oldLine: nil, newLine: l.newNo)
+        case .del: return LineAnchor(path: file.path, oldLine: l.oldNo, newLine: nil)
+        default: return LineAnchor(path: file.path, oldLine: l.oldNo, newLine: l.newNo)
+        }
     }
 
     private let largeThreshold = 4000

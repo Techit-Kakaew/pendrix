@@ -380,6 +380,15 @@ enum AIReviewer {
         return candidates.max { score($0) < score($1) }
     }
 
+    /// Context lines need both numbers (GitLab line_code), additions only new, deletions only old.
+    static func anchor(for l: DiffLine, path: String) -> LineAnchor {
+        switch l.kind {
+        case .add: return LineAnchor(path: path, oldLine: nil, newLine: l.newNo)
+        case .del: return LineAnchor(path: path, oldLine: l.oldNo, newLine: nil)
+        default: return LineAnchor(path: path, oldLine: l.oldNo, newLine: l.newNo)
+        }
+    }
+
     private static func map(_ findings: [Finding], to d: ChangeDetail) -> [AIDraft] {
         findings.map { f -> AIDraft in
             var anchor: LineAnchor? = nil
@@ -388,13 +397,13 @@ enum AIReviewer {
                 if f.side == "old", let l = lines.first(where: { $0.kind == .del && $0.oldNo == f.line }) {
                     anchor = LineAnchor(path: file.path, oldLine: l.oldNo, newLine: nil)
                 } else if let l = lines.first(where: { $0.kind != .del && $0.newNo == f.line }) {
-                    anchor = LineAnchor(path: file.path, oldLine: nil, newLine: l.newNo)
+                    anchor = Self.anchor(for: l, path: file.path)
                 } else if let l = lines.first(where: { $0.newNo == f.line || $0.oldNo == f.line }) {
-                    anchor = LineAnchor(path: file.path, oldLine: l.kind == .del ? l.oldNo : nil, newLine: l.kind == .del ? nil : l.newNo)
+                    anchor = Self.anchor(for: l, path: file.path)
                 } else if let l = lines.filter({ $0.kind != .meta && $0.newNo != nil }).min(by: { abs(($0.newNo ?? 0) - f.line) < abs(($1.newNo ?? 0) - f.line) }),
                           abs((l.newNo ?? 0) - f.line) <= 6 {
                     // the model pointed just outside the hunk: snap to the nearest visible line rather than losing the anchor
-                    anchor = LineAnchor(path: file.path, oldLine: nil, newLine: l.newNo)
+                    anchor = Self.anchor(for: l, path: file.path)
                 }
                 return draft(from: f, path: file.path, anchor: anchor)
             }
