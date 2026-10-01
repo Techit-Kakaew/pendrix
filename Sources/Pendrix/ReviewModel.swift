@@ -102,9 +102,21 @@ final class ReviewModel: ObservableObject {
         persistAI()
     }
     func dismiss(_ draft: AIDraft) { aiDrafts.removeAll { $0.id == draft.id }; persistAI() }
+    /// Re-derive old/new numbers from the current diff so stored anchors (older rules, or a new push) post correctly.
+    func normalized(_ a: LineAnchor?, in d: ChangeDetail) -> LineAnchor? {
+        guard let a, let file = d.files.first(where: { $0.path == a.path }) else { return a }
+        let lines = file.hunks.flatMap(\.lines)
+        if let n = a.newLine, let l = lines.first(where: { $0.kind != .del && $0.newNo == n }) { return AIReviewer.anchor(for: l, path: file.path) }
+        if let o = a.oldLine, let l = lines.first(where: { $0.kind == .del && $0.oldNo == o }) { return AIReviewer.anchor(for: l, path: file.path) }
+        if let o = a.oldLine, let l = lines.first(where: { $0.oldNo == o }) { return AIReviewer.anchor(for: l, path: file.path) }
+        return a
+    }
+
     /// Posts one draft as a real comment (anchored when the line resolved, otherwise on the conversation with a path prefix).
     func post(_ draft: AIDraft) async {
         guard let host, let d = detail else { return }
+        var draft = draft
+        draft.anchor = normalized(draft.anchor, in: d)
         let body = draft.anchor != nil ? draft.display : "`\(draft.path ?? "")`\n\n\(draft.display)"
         guard await Auth.require("Pendrix: post comment on \(d.title)") else { return }
         busy = true
@@ -112,7 +124,7 @@ final class ReviewModel: ObservableObject {
             do { try await host.comment(ref, at: draft.anchor, body: body, detail: d) }
             catch let e as APIError where e.message.contains("line_code") || e.message.contains("HTTP 400") {
                 let fresh = try await host.detail(ref); detail = fresh
-                try await host.comment(ref, at: draft.anchor, body: body, detail: fresh)
+                try await host.comment(ref, at: normalized(draft.anchor, in: fresh), body: body, detail: fresh)
             }
             if let i = aiDrafts.firstIndex(where: { $0.id == draft.id }) { aiDrafts[i].posted = true }
             persistAI()
@@ -282,13 +294,14 @@ final class ReviewModel: ObservableObject {
     func comment(_ body: String, at anchor: LineAnchor?) async {
         guard let host, let d = detail, !body.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         composing = nil
+        let a0 = normalized(anchor, in: d)
         await perform("Comment posted") {
-            do { try await host.comment(self.ref, at: anchor, body: body, detail: d) }
+            do { try await host.comment(self.ref, at: a0, body: body, detail: d) }
             catch let e as APIError where e.message.contains("line_code") || e.message.contains("HTTP 400") {
                 // position rejected: usually SHAs moved after a push — reload and try once with fresh refs
                 let fresh = try await host.detail(self.ref)
-                await MainActor.run { self.detail = fresh }
-                try await host.comment(self.ref, at: anchor, body: body, detail: fresh)
+                let a1 = await MainActor.run { self.detail = fresh; return self.normalized(anchor, in: fresh) }
+                try await host.comment(self.ref, at: a1, body: body, detail: fresh)
             }
         }
     }
