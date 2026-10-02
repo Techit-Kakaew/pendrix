@@ -31,6 +31,8 @@ enum RepoLocator {
         if s.hasSuffix(".git") { s.removeLast(4) }
         if let r = s.range(of: "://") { s = String(s[r.upperBound...]) }
         if let at = s.firstIndex(of: "@") { s = String(s[s.index(after: at)...]) }
+        // ssh://host:2222/group/repo → drop the port; scp-style host:group/repo → slash
+        s = s.replacingOccurrences(of: "^([^/:]+):\\d+/", with: "$1/", options: .regularExpression)
         s = s.replacingOccurrences(of: ":", with: "/")
         while s.hasSuffix("/") { s.removeLast() }
         return s
@@ -41,13 +43,23 @@ enum RepoLocator {
         if let cached = (UserDefaults.standard.dictionary(forKey: cacheKey) as? [String: String])?[key],
            FileManager.default.fileExists(atPath: cached + "/.git") { return cached }
         if !scanned { scan(); scanned = true }
-        if let hit = index[key] {
+        var hit = index[key]
+        if hit == nil {
+            // host alias or moved group: fall back to a repo name that is unique among the clones
+            let name = (key as NSString).lastPathComponent
+            let byName = Set(index.filter { ($0.key as NSString).lastPathComponent == name }.values)
+            if byName.count == 1 { hit = byName.first }
+        }
+        lastLookup = key
+        if let hit {
             var d = (UserDefaults.standard.dictionary(forKey: cacheKey) as? [String: String]) ?? [:]
             d[key] = hit; UserDefaults.standard.set(d, forKey: cacheKey)
             return hit
         }
         return nil
     }
+    /// What the last locate() searched for — shown in the UI when nothing matched.
+    nonisolated(unsafe) static var lastLookup = ""
 
     /// Walks roots up to 4 levels, reads each .git/config for remote URLs.
     static func scan() {

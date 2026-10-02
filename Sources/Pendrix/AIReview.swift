@@ -271,12 +271,17 @@ enum AIReviewer {
         """
         let raw = try await ClaudeCLI.run(prompt: prompt, timeout: 180)
         guard let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") else { throw APIError(message: "AI returned no JSON") }
-        struct A: Decodable { let label: String?; let decorations: [String]?; let subject: String?; let discussion: String?; let body: String? }
-        let a = try JSONDecoder().decode(A.self, from: Data(String(raw[start...end]).utf8))
-        let label = ConventionalComment.labels.contains((a.label ?? "").lowercased()) ? (a.label ?? "").lowercased() : "note"
-        let decos = (a.decorations ?? []).map { $0.lowercased() }.filter { ConventionalComment.decorations.contains($0) }
+        guard let a = (try? JSONSerialization.jsonObject(with: Data(String(raw[start...end]).utf8), options: [.fragmentsAllowed])) as? [String: Any] else {
+            // not JSON at all: keep the answer as a plain note rather than failing
+            return AIDraft(path: file.path, anchor: anchor, severity: .question, title: q, body: raw.trimmingCharacters(in: .whitespacesAndNewlines), label: "note", decorations: [])
+        }
+        let rawLabel = ((a["label"] as? String) ?? "").lowercased()
+        let label = ConventionalComment.labels.contains(rawLabel) ? rawLabel : "note"
+        let decoAny = a["decorations"]
+        let decos = ((decoAny as? [String]) ?? ((decoAny as? String)?.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) } ?? []))
+            .map { $0.lowercased() }.filter { ConventionalComment.decorations.contains($0) }
         return AIDraft(path: file.path, anchor: anchor, severity: ConventionalComment.severity(label: label, decorations: decos),
-                       title: a.subject ?? "", body: a.discussion ?? a.body ?? "", label: label, decorations: decos)
+                       title: (a["subject"] as? String) ?? "", body: (a["discussion"] as? String) ?? (a["body"] as? String) ?? "", label: label, decorations: decos)
     }
 
     // MARK: deep review inside the local clone
@@ -431,20 +436,35 @@ enum AIReviewer {
         }
     }
 
-    private struct Finding: Decodable {
+    private struct Finding {
         let path: String; let line: Int; let side: String?
         let label: String?; let decorations: [String]?; let subject: String?; let discussion: String?
         // legacy shape, still accepted
         let severity: String?; let title: String?; let body: String?
     }
-    private struct Payload: Decodable { let summary: String?; let findings: [Finding]? }
 
-    /// Tolerates fences or stray prose around the object.
+    /// Tolerates fences, stray prose, and loose types (line as "12", decorations as "blocking"). Bad entries are skipped, not fatal.
     private static func parse(_ raw: String) throws -> (String, [Finding]) {
         guard let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") else { throw APIError(message: "AI returned no JSON: \(raw.prefix(200))") }
         let json = String(raw[start...end])
-        let p = try JSONDecoder().decode(Payload.self, from: Data(json.utf8))
-        return (p.summary ?? "", p.findings ?? [])
+        guard let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8), options: [.fragmentsAllowed])) as? [String: Any] else {
+            throw APIError(message: "AI returned malformed JSON: \(json.prefix(200))")
+        }
+        func str(_ v: Any?) -> String? { if let s = v as? String { return s }; if let n = v as? NSNumber { return n.stringValue }; return nil }
+        func int(_ v: Any?) -> Int? { if let n = v as? NSNumber { return n.intValue }; if let s = v as? String { return Int(s.trimmingCharacters(in: .whitespaces)) }; return nil }
+        func list(_ v: Any?) -> [String]? {
+            if let a = v as? [Any] { return a.compactMap(str) }
+            if let s = v as? String { return s.split(whereSeparator: { $0 == "," || $0 == " " }).map(String.init) }
+            return nil
+        }
+        let summary = str(obj["summary"]) ?? ""
+        let findings = ((obj["findings"] as? [Any]) ?? []).compactMap { any -> Finding? in
+            guard let f = any as? [String: Any], let path = str(f["path"]) else { return nil }
+            return Finding(path: path, line: int(f["line"]) ?? 0, side: str(f["side"]),
+                           label: str(f["label"]), decorations: list(f["decorations"]), subject: str(f["subject"]), discussion: str(f["discussion"]),
+                           severity: str(f["severity"]), title: str(f["title"]), body: str(f["body"]))
+        }
+        return (summary, findings)
     }
 
     static func isGenerated(_ path: String) -> Bool {

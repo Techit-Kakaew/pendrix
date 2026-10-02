@@ -46,7 +46,7 @@ struct AIDraftsView: View {
             Text("AI DRAFTS").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
             switch model.aiMode {
             case .deep(let repo): Text("Deep review · \((repo as NSString).lastPathComponent)\(model.aiTiming.isEmpty ? "" : " · " + model.aiTiming)").font(Type.meta).foregroundStyle(WorkItem.Tone.done.color).lineLimit(1)
-            case .diffOnly: Text("Diff-only · no clone under \(RepoLocator.configuredRoots)\(model.aiTiming.isEmpty ? "" : " · " + model.aiTiming)").font(Type.meta).foregroundStyle(.tertiary).lineLimit(1)
+            case .diffOnly: Text("Diff-only · no clone for \(RepoLocator.lastLookup.isEmpty ? "this repo" : RepoLocator.lastLookup) under \(RepoLocator.configuredRoots)\(model.aiTiming.isEmpty ? "" : " · " + model.aiTiming)").font(Type.meta).foregroundStyle(.tertiary).lineLimit(1).help(RepoLocator.lastLookup)
             case nil: Text("Suggestions from Claude. Edit freely; only Post sends anything.").font(Type.meta).foregroundStyle(.tertiary)
             }
             Spacer()
