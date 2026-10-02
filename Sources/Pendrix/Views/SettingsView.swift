@@ -96,6 +96,7 @@ struct SettingsView: View {
                     Text("low").tag("low"); Text("medium").tag("medium"); Text("high").tag("high"); Text("xhigh").tag("xhigh")
                 }
                 Toggle("Skip your Claude Code user hooks during reviews (faster tool calls)", isOn: $config.aiSkipUserHooks)
+                Toggle("Keep review transcripts (shows up in TokenBar, resumable with claude --resume)", isOn: $config.aiPersistSessions)
                 Toggle("Use codegraph index during deep review (faster, fewer tool calls)", isOn: $config.useCodeGraph)
                 Toggle("Read linked Jira tickets (MAR-123 in title/branch) and check the change against them", isOn: $config.aiReadTickets)
                 if CodeGraph.isInstalled {

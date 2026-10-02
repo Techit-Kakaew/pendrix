@@ -41,6 +41,8 @@ final class Config: ObservableObject {
     @Published var aiModel: String { didSet { d.set(aiModel, forKey: "aiModel") } }
     @Published var aiEffort: String { didSet { d.set(aiEffort, forKey: "aiEffort") } }
     @Published var aiSkipUserHooks: Bool { didSet { d.set(aiSkipUserHooks, forKey: "aiSkipUserHooks") } }
+    /// Keep claude transcripts for review runs so TokenBar (and `claude --resume`) can see them. Off = --no-session-persistence.
+    @Published var aiPersistSessions: Bool { didSet { d.set(aiPersistSessions, forKey: "aiPersistSessions") } }
     // Updates
     @Published var autoUpdate: Bool { didSet { d.set(autoUpdate, forKey: "autoUpdate") } }
     /// GitHub "owner/repo" whose releases carry Pendrix-x.y.z.dmg + .dmg.sha256.
@@ -79,6 +81,7 @@ final class Config: ObservableObject {
         aiModel = d.string(forKey: "aiModel") ?? "sonnet"
         aiEffort = d.string(forKey: "aiEffort") ?? "medium"
         aiSkipUserHooks = d.object(forKey: "aiSkipUserHooks") as? Bool ?? true
+        aiPersistSessions = d.object(forKey: "aiPersistSessions") as? Bool ?? true
         autoUpdate = d.object(forKey: "autoUpdate") as? Bool ?? true
         updateRepo = d.string(forKey: "updateRepo") ?? "Techit-Kakaew/pendrix"
         standupReminder = d.object(forKey: "standupReminder") as? Bool ?? false

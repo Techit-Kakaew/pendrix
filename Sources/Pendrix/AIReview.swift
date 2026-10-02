@@ -60,6 +60,7 @@ enum ClaudeCLI {
         if !c.aiModel.isEmpty { a += ["--model", c.aiModel] }
         if !c.aiEffort.isEmpty { a += ["--effort", c.aiEffort] }
         if c.aiSkipUserHooks { a += ["--setting-sources", "project,local"] }   // user hooks (rtk, caveman…) spawn a process per tool call
+        if !c.aiPersistSessions { a.append("--no-session-persistence") }
         return a
     }
 
@@ -74,7 +75,7 @@ enum ClaudeCLI {
         return try await withCheckedThrowingContinuation { cont in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: exe)
-            var args = ["-p", "--output-format", "json", "--no-session-persistence", "--tools", tools.isEmpty ? "" : tools.joined(separator: ",")]
+            var args = ["-p", "--output-format", "json", "--tools", tools.isEmpty ? "" : tools.joined(separator: ",")]
             if !allowed.isEmpty { args += ["--allowedTools", allowed.joined(separator: ",")] }
             // Our own MCP set only: the user's global servers would otherwise load on every run (slower boot, unrelated tools).
             // Always strict: without it claude boots every MCP server configured on this Mac (Atlassian, Figma, browsers…) per run.
