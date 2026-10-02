@@ -111,7 +111,9 @@ struct DraftCard: View {
                 TextField("Comment", text: $body_, axis: .vertical).textFieldStyle(.plain).font(Type.title).lineLimit(2...12)
                     .padding(8).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.primary.opacity(0.05)))
             } else {
-                Text(markdown(draft.body)).font(Type.title).textSelection(.enabled).lineSpacing(2)
+                let sug = SuggestionMarkdown.parse(draft.body)
+                if !sug.prose.isEmpty || sug.blocks.isEmpty { Text(markdown(sug.blocks.isEmpty ? draft.body : sug.prose)).font(Type.title).textSelection(.enabled).lineSpacing(2) }
+                ForEach(Array(sug.blocks.enumerated()), id: \.offset) { _, b in SuggestionBlockView(code: b.code, original: nil) }
             }
             HStack(spacing: 12) {
                 Button("Post") { Task { await model.post(draft) } }

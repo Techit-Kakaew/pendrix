@@ -324,6 +324,14 @@ func markdown(_ s: String) -> AttributedString {
 struct ThreadView: View {
     let thread: ReviewThread
     @ObservedObject var model: ReviewModel
+
+    /// The lines a suggestion replaces, from the current diff (new side), when the thread is anchored.
+    private func originalLines(for t: ReviewThread, above: Int, below: Int) -> [String]? {
+        guard let a = t.anchor, let n = a.newLine, let f = model.file(a.path) else { return nil }
+        let lines = f.hunks.flatMap(\.lines).filter { $0.kind != .del && $0.newNo != nil }
+        let r = lines.filter { ($0.newNo ?? 0) >= n - above && ($0.newNo ?? 0) <= n + below }.map(\.text)
+        return r.isEmpty ? nil : r
+    }
     @State private var reply = ""
     @State private var replying = false
 
@@ -336,11 +344,16 @@ struct ThreadView: View {
                         Text(c.created.relative).font(Type.meta).foregroundStyle(.tertiary)
                         if let p = ConventionalComment.parse(c.body) { ConventionalPill(label: p.label, decorations: p.decorations) }
                     }
-                    if let p = ConventionalComment.parse(c.body) {
+                    let sug = SuggestionMarkdown.parse(c.body)
+                    let shown = sug.blocks.isEmpty ? c.body : sug.prose
+                    if let p = ConventionalComment.parse(shown) {
                         Text(markdown(p.subject)).font(Type.title).fontWeight(.medium).textSelection(.enabled)
                         if !p.discussion.isEmpty { Text(markdown(p.discussion)).font(Type.title).textSelection(.enabled).lineSpacing(2) }
-                    } else {
-                        Text(markdown(c.body)).font(Type.title).textSelection(.enabled).lineSpacing(2)
+                    } else if !shown.isEmpty {
+                        Text(markdown(shown)).font(Type.title).textSelection(.enabled).lineSpacing(2)
+                    }
+                    ForEach(Array(sug.blocks.enumerated()), id: \.offset) { _, b in
+                        SuggestionBlockView(code: b.code, original: originalLines(for: thread, above: b.above, below: b.below))
                     }
                 }
             }

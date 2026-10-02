@@ -6,6 +6,10 @@ struct DiffView: View {
     @ObservedObject var model: ReviewModel
     @State private var draft = ""
     @State private var colored: [Int: AttributedString] = [:]
+    @State private var suggesting = false
+    @State private var sugAbove = 0
+    @State private var sugBelow = 0
+    @State private var sugText = ""
     @FocusState private var searchFocused: Bool
     @Environment(\.colorScheme) private var scheme
 
@@ -85,13 +89,27 @@ struct DiffView: View {
                                                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WorkItem.pendingColor.opacity(0.06)))
                                         }
                                         if model.composing == anchor(l) {
+                                            let editor = SuggestionEditor(file: file, line: l, kind: model.kind, above: $sugAbove, below: $sugBelow, text: $sugText)
                                             VStack(alignment: .trailing, spacing: 6) {
-                                                ComposeBox(text: $draft, placeholder: "Comment on line \(l.newNo ?? l.oldNo ?? 0)… or type a question and press Ask AI", submit: "Comment", action: {
-                                                    Task { await model.comment(draft, at: anchor(l)); draft = "" }
-                                                }, cancel: { model.composing = nil; draft = "" }, conventional: true)
-                                                Button("Ask AI") { let q = draft; draft = ""; Task { await model.ask(q, at: l, in: file) } }
-                                                    .buttonStyle(.plain).font(Type.meta).fontWeight(.medium).foregroundStyle(WorkItem.pendingColor)
-                                                    .help("Ask Claude about this line. The answer arrives as a draft you can post or dismiss.")
+                                                if suggesting, l.kind != .del { editor }
+                                                ComposeBox(text: $draft, placeholder: suggesting ? "Why this change (optional)…" : "Comment on line \(l.newNo ?? l.oldNo ?? 0)… or type a question and press Ask AI", submit: suggesting ? "Post suggestion" : "Comment", action: {
+                                                    if suggesting {
+                                                        let r = editor.render(comment: draft)
+                                                        Task { await model.comment(r.body, at: r.anchor); draft = ""; sugText = ""; suggesting = false }
+                                                    } else {
+                                                        Task { await model.comment(draft, at: anchor(l)); draft = "" }
+                                                    }
+                                                }, cancel: { model.composing = nil; draft = ""; suggesting = false; sugText = "" }, conventional: !suggesting)
+                                                HStack(spacing: 14) {
+                                                    if l.kind != .del {
+                                                        Button(suggesting ? "Plain comment" : "Suggest change") { suggesting.toggle(); if !suggesting { sugText = "" } }
+                                                            .buttonStyle(.plain).font(Type.meta).fontWeight(.medium).foregroundStyle(WorkItem.Tone.active.color)
+                                                            .help("Propose replacement code the author can apply with one click")
+                                                    }
+                                                    Button("Ask AI") { let q = draft; draft = ""; Task { await model.ask(q, at: l, in: file) } }
+                                                        .buttonStyle(.plain).font(Type.meta).fontWeight(.medium).foregroundStyle(WorkItem.pendingColor)
+                                                        .help("Ask Claude about this line. The answer arrives as a draft you can post or dismiss.")
+                                                }
                                             }
                                             .padding(12)
                                             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.primary.opacity(0.06)))
@@ -173,7 +191,7 @@ struct DiffView: View {
         }
         let sign = l.kind == .add ? "+" : l.kind == .del ? "−" : " "
         return HStack(spacing: 0) {
-            Button { model.composing = model.composing == anchor(l) ? nil : anchor(l) } label: {
+            Button { model.composing = model.composing == anchor(l) ? nil : anchor(l); suggesting = false; sugText = ""; sugAbove = 0; sugBelow = 0 } label: {
                 HStack(spacing: 0) {
                     Text(l.oldNo.map(String.init) ?? "").frame(width: 40, alignment: .trailing)
                     Text(l.newNo.map(String.init) ?? "").frame(width: 40, alignment: .trailing)

@@ -49,6 +49,8 @@ struct LineAnchor: Hashable, Codable {
     var path: String
     var oldLine: Int?
     var newLine: Int?
+    /// GitHub multi-line comments: first line of the range (the comment itself sits on `newLine`).
+    var startNewLine: Int? = nil
 }
 
 struct Comment: Identifiable, Hashable {

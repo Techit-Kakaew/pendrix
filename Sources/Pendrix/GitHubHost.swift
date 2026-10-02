@@ -220,6 +220,7 @@ struct GitHubHost: CodeHost {
         if let a = anchor {
             var j: [String: Any] = ["body": body, "commit_id": detail.headSHA, "path": a.path]
             if let n = a.newLine { j["line"] = n; j["side"] = "RIGHT" } else if let o = a.oldLine { j["line"] = o; j["side"] = "LEFT" }
+            if let s = a.startNewLine, let n = a.newLine, s < n { j["start_line"] = s; j["start_side"] = "RIGHT" }
             _ = try await http.send("POST", repo(ref, "/pulls/\(ref.number)/comments"), json: j)
         } else {
             _ = try await http.send("POST", repo(ref, "/issues/\(ref.number)/comments"), json: ["body": body])

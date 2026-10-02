@@ -208,7 +208,8 @@ enum AIReviewer {
 
         Comments follow conventionalcomments.org. "label" is one of: praise, nitpick, suggestion, issue, todo, question, thought, chore, note, typo, polish, quibble.
         "decorations" is a subset of ["blocking", "non-blocking", "if-minor"] — use "blocking" only for issues that must be fixed before merge; nitpick/thought/note/praise are non-blocking by definition (leave decorations empty for them).
-        "subject" is one short sentence stating the point; "discussion" is the reasoning and the concrete fix (may be empty for praise/typo). Both are posted verbatim as "<label> (<decorations>): <subject>\\n\\n<discussion>".
+        "subject" is one short sentence stating the point; "discussion" is the reasoning and the concrete fix (may be empty for praise/typo).
+        When the fix is an exact replacement of the commented line only, put the replacement in a fenced block that starts with ```suggestion (the host turns it into a one-click Apply). Only the new text of that single line, nothing else, inside the block. Both are posted verbatim as "<label> (<decorations>): <subject>\\n\\n<discussion>".
         Include at most one praise, only if something is genuinely well done.
 
         Rules:
@@ -318,6 +319,7 @@ enum AIReviewer {
         Output ONLY a JSON object at the end, no prose around it, no markdown fences:
         {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "label": string, "decorations": [string], "subject": string, "discussion": string}]}
         Comments follow conventionalcomments.org. "label" ∈ praise, nitpick, suggestion, issue, todo, question, thought, chore, note, typo, polish, quibble. "decorations" ⊆ ["blocking", "non-blocking", "if-minor"]; "blocking" only for must-fix-before-merge. "subject" = one short sentence; "discussion" = reasoning + concrete fix (empty allowed). Posted verbatim as "<label> (<decorations>): <subject>\\n\\n<discussion>". At most one praise, only if earned.
+        When the fix is an exact replacement of the commented line only, put the replacement in a fenced block starting with ```suggestion (one-click Apply on the host): only the new text of that single line inside the block.
         - "path" is the FULL repo-relative path exactly as `git diff` prints it (never just the file name — many files share one). "line" for side "new" is the line number in the HEAD version of the file; for side "old" it is the line number in the base version. Only reference lines that are part of the diff hunks.
         - At most 8 findings, most important first. Empty findings if the change is fine; say so in summary.
         - Be terse: "summary" ≤ 2 sentences; "discussion" ≤ 2 sentences, a fenced code block only when it changes the outcome. Total output well under 400 words.
