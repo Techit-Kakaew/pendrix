@@ -45,6 +45,10 @@ Speed: deep review keeps one persistent worktree per repo (`~/Library/Caches/Pen
 
 Pairing: the AI pass starts automatically when you open a review request (Settings → AI review), so drafts arrive while you read; files it found nothing in show `ai ✓`. Click a line number and press "Ask AI" (with or without a typed question) to get a focused answer about that line as a draft.
 
+## Suggested changes
+
+Click a line number → "Suggest change": the editor shows the current line (widen with above/below), you type the replacement, and it posts a `suggestion` block the author applies with one click — GitLab `suggestion:-A+B` or GitHub multi-line with `start_line`. Suggestion blocks in existing comments render as red/green boxes; AI drafts use them for single-line replacements.
+
 ## Conventional Comments
 
 Comments follow [conventionalcomments.org](https://conventionalcomments.org/): `label (decorations): subject` + discussion. The compose box has a label row (praise, nitpick, suggestion, issue, todo, question, thought, chore, note, typo, polish, quibble) and decorations (blocking / non-blocking / if-minor); AI drafts and Ask AI answers come back in the same shape, and existing comments that follow it get a label pill.
