@@ -98,6 +98,18 @@ if CommandLine.arguments.contains("--polish-test") {
     RunLoop.main.run()
 }
 
+if CommandLine.arguments.contains("--json-test") {
+    // Debug: JSONRepair against the usual breakages — raw newlines in strings, trailing comma, truncated tail.
+    let broken1 = "```json\n{\"summary\": \"ok\", \"findings\": [{\"path\": \"a.ts\", \"line\": 3, \"label\": \"issue\", \"decorations\": [\"blocking\"], \"subject\": \"x\", \"discussion\": \"line one\nline two with \\\"quote\\\"\n```ts\nfoo()\n```\"},]}\n```"
+    let broken2 = "{\"summary\": \"Adds a provider. One gap and one no-o"
+    let broken3 = "{\"summary\": \"s\", \"findings\": [{\"path\": \"a.ts\", \"line\": \"12\", \"label\": \"nitpick\", \"subject\": \"ok\", \"discussion\": \"d\"}, {\"path\": \"b.ts\", \"line\": 9, \"label\": \"issue\", \"subject\": \"cut"
+    for (i, b) in [broken1, broken2, broken3].enumerated() {
+        let o = JSONRepair.object(from: b)
+        print("case \(i + 1):", o == nil ? "FAILED" : "summary=\((o?["summary"] as? String ?? "").prefix(30)) findings=\((o?["findings"] as? [Any])?.count ?? 0)")
+    }
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--ai-test") {
     // Debug: run the AI review pass on the demo change through the claude CLI and print the drafts.
     Task { @MainActor in

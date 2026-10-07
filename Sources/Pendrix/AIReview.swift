@@ -216,6 +216,7 @@ enum AIReviewer {
         - Report real problems: bugs, races, security, data loss, error handling, API misuse, missing tests for risky logic, misleading names. Skip style that a formatter handles.
         - At most 8 findings, most important first. If the change is fine, return an empty findings array and say so in summary.
         - Be terse: "summary" ≤ 2 sentences; "discussion" ≤ 2 sentences (plus a code block only when it changes the outcome). Total output well under 400 words.
+        - The output must be valid JSON: newlines inside strings as \\n, quotes as \\", no trailing commas, no text before or after the object.
         - "path" MUST be the full repo-relative path exactly as written after "###" below (never just the file name — many files share one).
         - "line" MUST be a number that appears in the diff below: use the number after "+" or " " for side "new", the number after "-" for side "old".
         - "discussion" is direct and specific, 1–4 sentences, with a concrete fix when possible. Use markdown sparingly; fenced code for code.
@@ -270,8 +271,7 @@ enum AIReviewer {
         \(ctx)
         """
         let raw = try await ClaudeCLI.run(prompt: prompt, timeout: 180)
-        guard let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") else { throw APIError(message: "AI returned no JSON") }
-        guard let a = (try? JSONSerialization.jsonObject(with: Data(String(raw[start...end]).utf8), options: [.fragmentsAllowed])) as? [String: Any] else {
+        guard let a = JSONRepair.object(from: raw) else {
             // not JSON at all: keep the answer as a plain note rather than failing
             return AIDraft(path: file.path, anchor: anchor, severity: .question, title: q, body: raw.trimmingCharacters(in: .whitespacesAndNewlines), label: "note", decorations: [])
         }
@@ -328,6 +328,7 @@ enum AIReviewer {
         - "path" is the FULL repo-relative path exactly as `git diff` prints it (never just the file name — many files share one). "line" for side "new" is the line number in the HEAD version of the file; for side "old" it is the line number in the base version. Only reference lines that are part of the diff hunks.
         - At most 8 findings, most important first. Empty findings if the change is fine; say so in summary.
         - Be terse: "summary" ≤ 2 sentences; "discussion" ≤ 2 sentences, a fenced code block only when it changes the outcome. Total output well under 400 words.
+        - The output must be valid JSON: newlines inside strings as \\n, quotes as \\", no trailing commas, no text before or after the object.
         - Write in Thai if the MR title/description or existing comments are mostly Thai, otherwise English. Keep identifiers, paths and code verbatim.
         - Do not repeat points already in existing comments.
 
@@ -445,10 +446,9 @@ enum AIReviewer {
 
     /// Tolerates fences, stray prose, and loose types (line as "12", decorations as "blocking"). Bad entries are skipped, not fatal.
     private static func parse(_ raw: String) throws -> (String, [Finding]) {
-        guard let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") else { throw APIError(message: "AI returned no JSON: \(raw.prefix(200))") }
-        let json = String(raw[start...end])
-        guard let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8), options: [.fragmentsAllowed])) as? [String: Any] else {
-            throw APIError(message: "AI returned malformed JSON: \(json.prefix(200))")
+        guard raw.contains("{") else { throw APIError(message: "AI returned no JSON: \(raw.prefix(200))") }
+        guard let obj = JSONRepair.object(from: raw) else {
+            throw APIError(message: "AI returned JSON that could not be repaired: \(raw.prefix(240))")
         }
         func str(_ v: Any?) -> String? { if let s = v as? String { return s }; if let n = v as? NSNumber { return n.stringValue }; return nil }
         func int(_ v: Any?) -> Int? { if let n = v as? NSNumber { return n.intValue }; if let s = v as? String { return Int(s.trimmingCharacters(in: .whitespaces)) }; return nil }
