@@ -114,7 +114,7 @@ if CommandLine.arguments.contains("--ai-test") {
     // Debug: run the AI review pass on the demo change through the claude CLI and print the drafts.
     Task { @MainActor in
         do {
-            let r = try await AIReviewer.review(Hub.demoDetail())
+            let r = try await AIReviewer.review(Hub.demoDetail()) { line in print("  ▸", line) }
             print("summary:", r.summary)
             for d in r.drafts { print("- [\(d.severity.rawValue)] \(d.path ?? "-"):\(d.anchor?.newLine ?? d.anchor?.oldLine ?? 0) \(d.title)\n    \(d.body.prefix(160))") }
             print("skipped:", r.skipped, "| timing:", AIReviewer.lastTiming)

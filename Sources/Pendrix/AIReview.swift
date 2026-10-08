@@ -65,12 +65,55 @@ enum ClaudeCLI {
     }
 
     /// Feeds `prompt` on stdin; returns the model's final text. Tools disabled, nothing persisted.
-    static func run(prompt: String, cwd: String? = nil, tools: [String] = [], allowed: [String] = [], mcpConfig: String? = nil, timeout: TimeInterval = 240) async throws -> String {
+    static func run(prompt: String, cwd: String? = nil, tools: [String] = [], allowed: [String] = [], mcpConfig: String? = nil, timeout: TimeInterval = 240,
+                    onEvent: (@Sendable (String) -> Void)? = nil) async throws -> String {
         let speed = await speedArgs()
-        return try await run(prompt: prompt, cwd: cwd, tools: tools, allowed: allowed, mcpConfig: mcpConfig, extra: speed, timeout: timeout)
+        return try await run(prompt: prompt, cwd: cwd, tools: tools, allowed: allowed, mcpConfig: mcpConfig, extra: speed, timeout: timeout, onEvent: onEvent)
     }
 
-    static func run(prompt: String, cwd: String?, tools: [String], allowed: [String], mcpConfig: String?, extra: [String], timeout: TimeInterval) async throws -> String {
+    /// One human-readable line per stream-json event: what claude is doing right now.
+    static func describe(_ j: [String: Any]) -> String? {
+        switch j["type"] as? String {
+        case "system":
+            if j["subtype"] as? String == "init" {
+                let mcp = (j["mcp_servers"] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? []
+                return "Started · \((j["model"] as? String) ?? "model")\(mcp.isEmpty ? "" : " · mcp: " + mcp.joined(separator: ", "))"
+            }
+            return nil
+        case "assistant":
+            guard let content = (j["message"] as? [String: Any])?["content"] as? [[String: Any]] else { return nil }
+            var lines: [String] = []
+            for c in content {
+                switch c["type"] as? String {
+                case "text":
+                    if let t = (c["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty, !t.hasPrefix("{") {
+                        lines.append("says: " + t.replacingOccurrences(of: "\n", with: " ").prefix(140))
+                    } else if (c["text"] as? String)?.hasPrefix("{") == true { lines.append("writing findings…") }
+                case "tool_use":
+                    let name = (c["name"] as? String) ?? "tool"
+                    let input = (c["input"] as? [String: Any]) ?? [:]
+                    func s(_ k: String) -> String { ((input[k] as? String) ?? "").replacingOccurrences(of: "\n", with: " ") }
+                    switch name {
+                    case "Read": lines.append("Read \((s("file_path") as NSString).lastPathComponent)\(input["offset"] != nil ? " (from line \(input["offset"] ?? ""))" : "")")
+                    case "Grep": lines.append("Grep '\(s("pattern").prefix(60))'\(s("path").isEmpty ? "" : " in " + (s("path") as NSString).lastPathComponent)")
+                    case "Glob": lines.append("Glob \(s("pattern").prefix(60))")
+                    case "Bash": lines.append("$ " + s("command").prefix(110))
+                    default:
+                        if name.hasPrefix("mcp__codegraph__") {
+                            let q = s("query").isEmpty ? (s("symbol").isEmpty ? s("name") : s("symbol")) : s("query")
+                            lines.append("codegraph \(name.replacingOccurrences(of: "mcp__codegraph__codegraph_", with: "")) \(q.prefix(80))")
+                        } else { lines.append(name) }
+                    }
+                default: break
+                }
+            }
+            return lines.isEmpty ? nil : lines.joined(separator: "\n")
+        default: return nil
+        }
+    }
+
+    static func run(prompt: String, cwd: String?, tools: [String], allowed: [String], mcpConfig: String?, extra: [String], timeout: TimeInterval,
+                    onEvent: (@Sendable (String) -> Void)? = nil) async throws -> String {
         guard let exe = locate() else { throw APIError(message: "claude CLI not found — install Claude Code and run `claude` once to log in") }
         let proc = Process()
         // Task cancellation (Stop button, closing the app) kills the claude process instead of leaving it running.
@@ -78,7 +121,8 @@ enum ClaudeCLI {
             try await withCheckedThrowingContinuation { cont in
             let p = proc
             p.executableURL = URL(fileURLWithPath: exe)
-            var args = ["-p", "--output-format", "json", "--tools", tools.isEmpty ? "" : tools.joined(separator: ",")]
+            // stream-json gives one event per line while the run is in flight; the last line is the same `result` object json mode returns.
+            var args = ["-p", "--output-format", "stream-json", "--verbose", "--tools", tools.isEmpty ? "" : tools.joined(separator: ",")]
             if !allowed.isEmpty { args += ["--allowedTools", allowed.joined(separator: ",")] }
             // Our own MCP set only: the user's global servers would otherwise load on every run (slower boot, unrelated tools).
             // Always strict: without it claude boots every MCP server configured on this Mac (Atlassian, Figma, browsers…) per run.
@@ -92,7 +136,19 @@ enum ClaudeCLI {
             let inPipe = Pipe(), outPipe = Pipe(), errPipe = Pipe()
             p.standardInput = inPipe; p.standardOutput = outPipe; p.standardError = errPipe
             var outData = Data(), errData = Data()
-            outPipe.fileHandleForReading.readabilityHandler = { h in outData.append(h.availableData) }
+            var lineBuf = Data()
+            var resultObj: [String: Any]? = nil
+            func consume(_ chunk: Data) {
+                lineBuf.append(chunk)
+                while let nl = lineBuf.firstIndex(of: 0x0A) {
+                    let line = lineBuf.subdata(in: lineBuf.startIndex..<nl)
+                    lineBuf.removeSubrange(lineBuf.startIndex...nl)
+                    guard !line.isEmpty, let j = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
+                    if j["type"] as? String == "result" { resultObj = j; continue }
+                    if let d = describe(j) { onEvent?(d) }
+                }
+            }
+            outPipe.fileHandleForReading.readabilityHandler = { h in let d = h.availableData; outData.append(d); consume(d) }
             errPipe.fileHandleForReading.readabilityHandler = { h in errData.append(h.availableData) }
             let timer = DispatchWorkItem { if p.isRunning { p.terminate() } }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
@@ -100,9 +156,10 @@ enum ClaudeCLI {
                 timer.cancel()
                 outPipe.fileHandleForReading.readabilityHandler = nil
                 errPipe.fileHandleForReading.readabilityHandler = nil
-                outData.append(outPipe.fileHandleForReading.readDataToEndOfFile())
+                let tail = outPipe.fileHandleForReading.readDataToEndOfFile()
+                outData.append(tail); consume(tail + Data([0x0A]))
                 errData.append(errPipe.fileHandleForReading.readDataToEndOfFile())
-                if let j = try? JSONSerialization.jsonObject(with: outData) as? [String: Any], let r = j["result"] as? String, !(j["is_error"] as? Bool ?? false) {
+                if let j = resultObj, let r = j["result"] as? String, !(j["is_error"] as? Bool ?? false) {
                     var st = Stats()
                     st.durationMs = (j["duration_ms"] as? Int) ?? 0
                     st.turns = (j["num_turns"] as? Int) ?? 0
@@ -175,18 +232,18 @@ enum AIReviewer {
         return parts.joined(separator: "\n\n")
     }
 
-    static func review(_ d: ChangeDetail) async throws -> (summary: String, drafts: [AIDraft], skipped: [String], mode: Mode) {
+    static func review(_ d: ChangeDetail, onEvent: (@Sendable (String) -> Void)? = nil) async throws -> (summary: String, drafts: [AIDraft], skipped: [String], mode: Mode) {
         let (deep, roots) = await MainActor.run { (Config.shared.deepReview, Config.shared.repoRoots) }
         RepoLocator.configuredRoots = roots
         if deep, let repo = RepoLocator.locate(d.url) {
-            let r = try await deepReview(d, repo: repo)
+            let r = try await deepReview(d, repo: repo, onEvent: onEvent)
             return (r.summary, r.drafts, r.skipped, .deep(repo: repo))
         }
-        let r = try await diffReview(d)
+        let r = try await diffReview(d, onEvent: onEvent)
         return (r.summary, r.drafts, r.skipped, .diffOnly)
     }
 
-    static func diffReview(_ d: ChangeDetail) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {
+    static func diffReview(_ d: ChangeDetail, onEvent: (@Sendable (String) -> Void)? = nil) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {
         var skipped: [String] = []
         var diffText = ""
         for f in d.files {
@@ -241,7 +298,8 @@ enum AIReviewer {
         Diff (format: <sign><line number>| <code>):
         \(diffText)
         """
-        let raw = try await ClaudeCLI.run(prompt: prompt)
+        onEvent?("Sending diff (\(diffText.utf8.count / 1024) KB, \(d.files.count - skipped.count) files)…")
+        let raw = try await ClaudeCLI.run(prompt: prompt, onEvent: onEvent)
         let (summary, findings) = try parse(raw)
         lastTiming = "claude \(ClaudeCLI.lastStats.line)"
         return (summary, map(findings, to: d), skipped)
@@ -293,7 +351,7 @@ enum AIReviewer {
 
     // MARK: deep review inside the local clone
 
-    static func deepReview(_ d: ChangeDetail, repo: String) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {
+    static func deepReview(_ d: ChangeDetail, repo: String, onEvent: (@Sendable (String) -> Void)? = nil) async throws -> (summary: String, drafts: [AIDraft], skipped: [String]) {
         // One persistent review worktree per repo: checkout moves to the MR head each run, so the codegraph index
         // (untracked .codegraph/) survives and only syncs the delta. Serialized per repo.
         let lock = reviewLock(for: repo); lock.lock(); defer { lock.unlock() }
@@ -301,8 +359,10 @@ enum AIReviewer {
         try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         let tag = String(repo.utf8.reduce(5381) { ($0 &* 33) &+ Int($1) } & 0xffffff, radix: 16)
         let wt = cache.appendingPathComponent("\((repo as NSString).lastPathComponent)-\(tag)").path
+        onEvent?("git fetch \(d.sourceBranch), \(d.targetBranch)…")
         try git(repo, ["fetch", "--quiet", "origin", d.sourceBranch, d.targetBranch])
         let head = d.headSHA.isEmpty ? "origin/\(d.sourceBranch)" : d.headSHA
+        onEvent?("Checking out \(String(head.prefix(10))) in the review worktree…")
         if FileManager.default.fileExists(atPath: wt + "/.git") {
             try git(wt, ["checkout", "--detach", "--quiet", "--force", head])
         } else {
@@ -311,6 +371,7 @@ enum AIReviewer {
         }
         let t0 = Date()
         let useGraph = await MainActor.run { Config.shared.useCodeGraph }
+        if useGraph { onEvent?(FileManager.default.fileExists(atPath: wt + "/.codegraph/codegraph.db") ? "codegraph sync…" : "codegraph init (first time for this repo)…") }
         let graphReady = useGraph && CodeGraph.ensureIndex(at: wt)
         let prepMs = Int(Date().timeIntervalSince(t0) * 1000)
         let mcp = graphReady ? CodeGraph.mcpConfig(for: wt) : nil
@@ -352,7 +413,7 @@ enum AIReviewer {
         let raw = try await ClaudeCLI.run(prompt: prompt, cwd: wt,
                                           tools: ["Read", "Grep", "Glob", "Bash"],
                                           allowed: ["Read", "Grep", "Glob", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git blame:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(wc:*)", "mcp__codegraph__*"],
-                                          mcpConfig: mcp, timeout: 600)
+                                          mcpConfig: mcp, timeout: 600, onEvent: onEvent)
         let (summary, findings) = try parse(raw)
         lastTiming = "\(graphReady ? "codegraph" : "grep") · prep \(prepMs / 1000)s · claude \(ClaudeCLI.lastStats.line)"
         return (summary, map(findings, to: d), [])

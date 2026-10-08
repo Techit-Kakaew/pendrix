@@ -18,8 +18,11 @@ struct AIDraftsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading).padding(12)
                         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WorkItem.Tone.danger.color.opacity(0.08)))
                 }
+                if model.aiRunning || (model.showLog && !model.aiLog.isEmpty) {
+                    activityLog
+                }
                 if model.aiRunning {
-                    HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Claude is reviewing… diff-only takes 30–90 s, deep review 2–6 min").font(Type.meta).foregroundStyle(.secondary) }
+                    EmptyView()
                 } else if !model.aiDrafts.isEmpty || !model.aiSummary.isEmpty {
                     summaryBlock
                     let groups = Dictionary(grouping: model.pendingDrafts, by: { $0.path ?? "" }).sorted { $0.key < $1.key }
@@ -41,6 +44,35 @@ struct AIDraftsView: View {
         .onChange(of: model.aiSummary) { _, s in summaryDraft = s }
     }
 
+    /// Live feed of tool calls / messages from the claude run; auto-scrolls to the newest line.
+    private var activityLog: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                if model.aiRunning { ProgressView().controlSize(.mini) }
+                Text(model.aiRunning ? "Claude is working" : "Last run").font(Type.meta).fontWeight(.medium)
+                Text("· \(model.aiLog.count) events").font(Type.meta).foregroundStyle(.tertiary)
+                Spacer()
+                if !model.aiRunning { Button("Hide log") { model.showLog = false }.buttonStyle(.plain).font(Type.meta).foregroundStyle(.tertiary) }
+            }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(model.aiLog.enumerated()), id: \.offset) { i, line in
+                            Text(line).font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(line.hasPrefix("says:") ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                                .textSelection(.enabled).id(i)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: 180)
+                .onChange(of: model.aiLog.count) { _, n in withAnimation(.linear(duration: 0.1)) { proxy.scrollTo(max(0, n - 1), anchor: .bottom) } }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.primary.opacity(0.05)))
+    }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("AI DRAFTS").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
@@ -56,6 +88,7 @@ struct AIDraftsView: View {
             if model.aiRunning {
                 Button("Stop") { model.stopAIReview() }.buttonStyle(.plain).font(Type.meta).foregroundStyle(WorkItem.Tone.danger.color)
             } else {
+                if !model.aiLog.isEmpty, !model.showLog { Button("Show log") { model.showLog = true }.buttonStyle(.plain).font(Type.meta).foregroundStyle(.tertiary) }
                 Button("Run again") { Task { await model.runAIReview() } }.buttonStyle(.plain).font(Type.meta).foregroundStyle(.secondary)
             }
             if !model.pendingDrafts.isEmpty {

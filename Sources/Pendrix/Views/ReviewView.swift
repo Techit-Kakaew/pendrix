@@ -117,6 +117,15 @@ struct ReviewView: View {
                 }
                 if d.isOpen {
                     if model.aiRunning {
+                        Button {
+                            model.showDrafts = true; model.selectedFile = nil
+                        } label: {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.mini)
+                                Text(model.aiLastEvent.isEmpty ? "Starting…" : model.aiLastEvent).font(Type.meta).foregroundStyle(.secondary).lineLimit(1).frame(maxWidth: 260, alignment: .leading)
+                            }
+                        }
+                        .buttonStyle(.plain).help("Click to watch what Claude is doing")
                         actionButton("Stop AI", tone: .danger) { model.stopAIReview() }
                             .help("Cancel the running AI review (kills the claude process)")
                     } else {

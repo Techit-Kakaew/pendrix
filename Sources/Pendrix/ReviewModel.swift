@@ -55,16 +55,26 @@ final class ReviewModel: ObservableObject {
 
     /// Hub observes start/finish so the inbox can show a spinner and notify when drafts are ready.
     var onAIStateChange: ((ChangeRef, _ running: Bool, _ drafts: Int, _ error: String?) -> Void)?
+    /// What claude is doing, one line per event, newest last. Kept after the run for inspection.
+    @Published var aiLog: [String] = []
+    @Published var showLog = false
+    var aiLastEvent: String { aiLog.last ?? "" }
     private var aiTask: Task<Void, Never>?
 
     func runAIReview() async {
         guard let d = detail, !aiRunning else { return }
-        aiRunning = true; aiError = nil
+        aiRunning = true; aiError = nil; aiLog = []
         onAIStateChange?(ref, true, 0, nil)
         let task = Task { [weak self] in
             guard let self else { return }
             do {
-                let r = try await AIReviewer.review(d)
+                let r = try await AIReviewer.review(d) { line in
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        for l in line.split(separator: "\n") { aiLog.append(String(l)) }
+                        if aiLog.count > 300 { aiLog.removeFirst(aiLog.count - 300) }
+                    }
+                }
                 guard !Task.isCancelled else { return }
                 aiSummary = r.summary; aiDrafts = r.drafts; aiSkipped = r.skipped; aiMode = r.mode
                 aiTiming = AIReviewer.lastTiming
