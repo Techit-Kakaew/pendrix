@@ -232,13 +232,14 @@ struct ReviewView: View {
 
     /// Files grouped by directory, directories in path order; files keep diff order inside.
     private var folderGroups: [(dir: String, files: [FileDiff])] {
+        // same ordering as ReviewModel.orderedFiles so v / arrows follow what's on screen
         var order: [String] = [], byDir: [String: [FileDiff]] = [:]
-        for f in model.shownFiles {
+        for f in model.orderedFiles {
             let dir = (f.path as NSString).deletingLastPathComponent
             if byDir[dir] == nil { order.append(dir) }
             byDir[dir, default: []].append(f)
         }
-        return order.sorted().map { ($0, byDir[$0] ?? []) }
+        return order.map { ($0, byDir[$0] ?? []) }
     }
 
     private func fileRowFor(_ f: FileDiff, showDir: Bool) -> some View {

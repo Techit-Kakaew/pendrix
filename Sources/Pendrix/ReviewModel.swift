@@ -160,9 +160,21 @@ final class ReviewModel: ObservableObject {
         let n = matches(in: f).count; guard n > 0 else { return }
         matchIndex = ((matchIndex + delta) % n + n) % n
     }
+    /// Files in the order the sidebar shows them (folder groups sorted by directory, or flat diff order).
+    var orderedFiles: [FileDiff] {
+        guard Config.shared.reviewGroupByFolder else { return shownFiles }
+        var order: [String] = [], byDir: [String: [FileDiff]] = [:]
+        for f in shownFiles {
+            let dir = (f.path as NSString).deletingLastPathComponent
+            if byDir[dir] == nil { order.append(dir) }
+            byDir[dir, default: []].append(f)
+        }
+        return order.sorted().flatMap { byDir[$0] ?? [] }
+    }
+
     func selectFile(offset: Int) {
         showDrafts = false
-        let files = shownFiles; guard !files.isEmpty else { return }
+        let files = orderedFiles; guard !files.isEmpty else { return }
         let idx = files.firstIndex { $0.path == selectedFile } ?? (offset > 0 ? -1 : files.count)
         selectedFile = files[max(0, min(files.count - 1, idx + offset))].path
         matchIndex = 0
@@ -219,7 +231,8 @@ final class ReviewModel: ObservableObject {
         guard !Self.isTyping, !commitMode, let f = file(selectedFile) else { return }
         let now = !isViewed(f)
         setViewed(f, now)
-        guard now, let files = detail?.files, let idx = files.firstIndex(where: { $0.path == f.path }) else { return }
+        let files = orderedFiles
+        guard now, let idx = files.firstIndex(where: { $0.path == f.path }) else { return }
         if let next = (files[(idx + 1)...] + files[..<idx]).first(where: { !isViewed($0) }) { selectedFile = next.path }
     }
     var viewedCount: Int { detail?.files.filter(isViewed).count ?? 0 }
