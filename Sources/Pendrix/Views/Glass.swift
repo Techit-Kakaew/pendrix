@@ -43,9 +43,11 @@ struct GlassSurface: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         if flat {
-            content.background(shape.fill(.primary.opacity(0.055)))
-                .background(shape.fill(tint?.opacity(0.06) ?? .clear))
-                .overlay(shape.strokeBorder(tint?.opacity(0.28) ?? Color.primary.opacity(0.08), lineWidth: 1))
+            // opaque enough that the wallpaper reads as a hint, not as texture behind the text
+            content.background(shape.fill(Color(nsColor: .windowBackgroundColor).opacity(0.72)))
+                .background(shape.fill(.primary.opacity(0.04)))
+                .overlay(shape.fill(tint?.opacity(0.07) ?? .clear).allowsHitTesting(false))
+                .overlay(shape.strokeBorder(tint?.opacity(0.35) ?? Color.primary.opacity(0.10), lineWidth: 1))
         } else if isSnapshot {
             content.background(shape.fill(.primary.opacity(0.06)))
                 .overlay(shape.strokeBorder(.primary.opacity(0.08), lineWidth: 1))
@@ -122,7 +124,7 @@ struct WindowBackdrop: View {
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                 } else {
                     WindowGlassTuner(material: .underWindowBackground)
-                    Color(nsColor: .windowBackgroundColor).opacity(scheme == .dark ? 0.55 : 0.45)
+                    Color(nsColor: .windowBackgroundColor).opacity(scheme == .dark ? 0.68 : 0.6)
                 }
             }
             .ignoresSafeArea()
