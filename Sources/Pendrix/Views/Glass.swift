@@ -136,8 +136,9 @@ struct WindowBackdrop: View {
 
 /// Marks a region as a window drag handle (the header row of each screen). Empty space there moves the window; controls still click.
 struct WindowDragHandle: ViewModifier {
+    @Environment(\.isSnapshot) private var isSnapshot
     func body(content: Content) -> some View {
-        content.background(DragArea())
+        if isSnapshot { content } else { content.background(DragArea()) }
     }
     private struct DragArea: NSViewRepresentable {
         func makeNSView(context: Context) -> NSView { Handle() }
