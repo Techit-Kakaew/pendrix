@@ -16,10 +16,12 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             header
             if isSnapshot { columns } else {
-                ScrollViewReader { proxy in
-                    ScrollView(showsIndicators: false) { columns }
-                        .onChange(of: hub.selectedID) { _, id in if let id { withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo(id, anchor: .center) } } }
+                // Each column scrolls on its own: a long Jira list no longer drags the GitLab cards off screen.
+                HStack(alignment: .top, spacing: 14) {
+                    column { jiraColumn }
+                    column { gitlabColumn }
                 }
+                .padding(.horizontal, 18)
             }
         }
         .modifier(Keys(enabled: !isSnapshot, hub: hub, open: open))
@@ -35,6 +37,15 @@ struct DashboardView: View {
             gitlabColumn.frame(maxWidth: .infinity)
         }
         .padding(.horizontal, 18).padding(.bottom, 18)
+    }
+
+    /// Independent scroller per column; keyboard selection scrolls whichever column holds the item.
+    private func column<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) { content().padding(.bottom, 18) }
+                .onChange(of: hub.selectedID) { _, id in if let id { withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo(id, anchor: .center) } } }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var header: some View {
