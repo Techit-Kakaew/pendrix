@@ -6,6 +6,7 @@ struct ReviewView: View {
     @EnvironmentObject var config: Config
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var confirmMerge = false
+    @AppStorage("reviewSidebarWidth") private var sidebarWidth: Double = 280
 
     var body: some View {
         Group {
@@ -18,8 +19,9 @@ struct ReviewView: View {
                             content(d).frame(maxWidth: .infinity)
                         }
                     } else {
-                        HSplitView {
-                            fileList(d).frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
+                        HStack(spacing: 0) {
+                            fileList(d).frame(width: sidebarWidth)
+                            SplitHandle(width: $sidebarWidth, range: 220...420)
                             content(d).frame(minWidth: 480, maxWidth: .infinity)
                         }
                     }
@@ -526,5 +528,28 @@ struct FileFilterField: View {
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.primary.opacity(focused || !model.fileQuery.isEmpty ? 0.08 : 0.04)))
         .padding(.horizontal, 8).padding(.bottom, 6)
+    }
+}
+
+
+/// Invisible drag handle between sidebar and diff. Replaces HSplitView, whose divider drew a hard black line on the glass.
+struct SplitHandle: View {
+    @Binding var width: Double
+    let range: ClosedRange<Double>
+    @State private var startWidth: Double? = nil
+    @State private var hover = false
+    var body: some View {
+        Rectangle().fill(.clear)
+            .frame(width: 10)
+            .overlay(Rectangle().fill(.primary.opacity(hover ? 0.12 : 0)).frame(width: 2))
+            .contentShape(Rectangle())
+            .onHover { h in hover = h; if h { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+            .gesture(DragGesture(minimumDistance: 1)
+                .onChanged { v in
+                    if startWidth == nil { startWidth = width }
+                    width = min(range.upperBound, max(range.lowerBound, (startWidth ?? width) + v.translation.width))
+                }
+                .onEnded { _ in startWidth = nil })
+            .padding(.leading, 8)   // the sidebar card has 18pt leading padding; keep the handle in the gap
     }
 }

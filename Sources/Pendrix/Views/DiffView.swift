@@ -81,7 +81,7 @@ struct DiffView: View {
                 GeometryReader { geo in
                 ScrollViewReader { proxy in
                 Scrolling(axes: [.vertical, .horizontal], indicators: true) {
-                    LazyRows(snapshot: isSnapshot) {
+                    LazyRows(lazy: !isSnapshot && lineCount > 1500) {
                         ForEach(file.hunks) { h in
                             Text(h.header).font(mono).foregroundStyle(.tertiary)
                                 .padding(.horizontal, 16).padding(.vertical, 5)
@@ -239,11 +239,13 @@ struct DiffView: View {
 
 
 /// LazyVStack in the app (only visible rows get built), plain VStack under ImageRenderer where laziness has no viewport.
+/// VStack sizes to its widest line, which the two-axis ScrollView needs for horizontal scrolling; LazyVStack does not,
+/// so laziness is reserved for very long diffs where build time matters more than side-scrolling.
 struct LazyRows<Content: View>: View {
-    let snapshot: Bool
+    let lazy: Bool
     @ViewBuilder var content: Content
     var body: some View {
-        if snapshot { VStack(alignment: .leading, spacing: 0) { content } }
-        else { LazyVStack(alignment: .leading, spacing: 0) { content } }
+        if lazy { LazyVStack(alignment: .leading, spacing: 0) { content } }
+        else { VStack(alignment: .leading, spacing: 0) { content } }
     }
 }
