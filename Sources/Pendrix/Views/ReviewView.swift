@@ -173,20 +173,29 @@ struct ReviewView: View {
                     if !model.commitMode, model.viewedCount > 0 {
                         Text("· \(model.viewedCount) viewed").font(Type.section).foregroundStyle(model.viewedCount == d.files.count ? AnyShapeStyle(WorkItem.Tone.done.color) : AnyShapeStyle(.tertiary))
                     }
+                    Spacer()
+                    Button(config.reviewGroupByFolder ? "flat" : "folders") { config.reviewGroupByFolder.toggle() }
+                        .buttonStyle(.plain).font(Type.meta).foregroundStyle(.tertiary).help("Switch between folder groups and a flat list")
                 }
                 .padding(.horizontal, 12).padding(.top, model.commitMode ? 4 : 14).padding(.bottom, 4)
                 FileFilterField(model: model)
                 if model.shownFiles.isEmpty, !model.fileQuery.isEmpty {
                     Text("No file matches").font(Type.meta).foregroundStyle(.tertiary).padding(.horizontal, 12).padding(.vertical, 6)
                 }
-                ForEach(model.shownFiles) { f in
-                    let unresolved = model.threads(for: f.path).filter { !$0.resolved }.count
-                    let hits = model.matchCount(in: f)
-                    let drafts = model.draftCount(in: f.path)
-                    fileRow(title: f.path, meta: hits > 0 ? "\(hits) hits" : drafts > 0 ? "\(drafts) drafts" : "+\(f.additions) −\(f.deletions)", selected: model.selectedFile == f.path,
-                            status: f.status, threads: unresolved, aiChecked: model.aiChecked(f),
-                            viewed: model.commitMode ? nil : model.isViewed(f),
-                            toggleViewed: { model.setViewed(f, !model.isViewed(f)) }) { model.selectedFile = f.path; model.showDrafts = false }
+                if config.reviewGroupByFolder {
+                    ForEach(folderGroups, id: \.dir) { g in
+                        HStack(spacing: 6) {
+                            Text(g.dir.isEmpty ? "/" : g.dir).font(Type.key).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head)
+                            Spacer(minLength: 4)
+                            let v = g.files.filter { model.isViewed($0) }.count
+                            if !model.commitMode, v > 0 { Text("\(v)/\(g.files.count)").font(Type.key).foregroundStyle(v == g.files.count ? AnyShapeStyle(WorkItem.Tone.done.color) : AnyShapeStyle(.quaternary)) }
+                        }
+                        .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
+                        .help(g.dir)
+                        ForEach(g.files) { f in fileRowFor(f, showDir: false).padding(.leading, 8) }
+                    }
+                } else {
+                    ForEach(model.shownFiles) { f in fileRowFor(f, showDir: true) }
                 }
                 if !d.commits.isEmpty {
                     Text("COMMITS · \(d.commits.count)").font(Type.section).foregroundStyle(.secondary).kerning(0.8)
@@ -221,7 +230,28 @@ struct ReviewView: View {
         .help(c.url?.absoluteString ?? c.id)
     }
 
-    private func fileRow(title: String, meta: String, selected: Bool, status: FileDiff.Status?, threads: Int = 0, aiChecked: Bool = false,
+    /// Files grouped by directory, directories in path order; files keep diff order inside.
+    private var folderGroups: [(dir: String, files: [FileDiff])] {
+        var order: [String] = [], byDir: [String: [FileDiff]] = [:]
+        for f in model.shownFiles {
+            let dir = (f.path as NSString).deletingLastPathComponent
+            if byDir[dir] == nil { order.append(dir) }
+            byDir[dir, default: []].append(f)
+        }
+        return order.sorted().map { ($0, byDir[$0] ?? []) }
+    }
+
+    private func fileRowFor(_ f: FileDiff, showDir: Bool) -> some View {
+        let unresolved = model.threads(for: f.path).filter { !$0.resolved }.count
+        let hits = model.matchCount(in: f)
+        let drafts = model.draftCount(in: f.path)
+        return fileRow(title: f.path, meta: hits > 0 ? "\(hits) hits" : drafts > 0 ? "\(drafts) drafts" : "+\(f.additions) −\(f.deletions)", selected: model.selectedFile == f.path,
+                       status: f.status, threads: unresolved, aiChecked: model.aiChecked(f), showDir: showDir,
+                       viewed: model.commitMode ? nil : model.isViewed(f),
+                       toggleViewed: { model.setViewed(f, !model.isViewed(f)) }) { model.selectedFile = f.path; model.showDrafts = false }
+    }
+
+    private func fileRow(title: String, meta: String, selected: Bool, status: FileDiff.Status?, threads: Int = 0, aiChecked: Bool = false, showDir: Bool = true,
                          viewed: Bool? = nil, toggleViewed: (() -> Void)? = nil, _ tap: @escaping () -> Void) -> some View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         // The viewed toggle sits beside the row button, not inside it, so its tap isn't swallowed.
@@ -236,7 +266,7 @@ struct ReviewView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text((title as NSString).lastPathComponent).font(Type.title).fontWeight(selected ? .semibold : .regular).lineLimit(1)
                         let dir = (title as NSString).deletingLastPathComponent
-                        if !dir.isEmpty { Text(dir).font(Type.meta).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head) }
+                        if showDir, !dir.isEmpty { Text(dir).font(Type.meta).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head) }
                     }
                     Spacer(minLength: 4)
                     if aiChecked { Text("ai ✓").font(.system(size: 9, weight: .semibold)).foregroundStyle(WorkItem.Tone.done.color.opacity(0.8)).help("AI review found nothing in this file") }

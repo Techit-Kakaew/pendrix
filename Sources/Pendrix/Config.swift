@@ -49,6 +49,8 @@ final class Config: ObservableObject {
     @Published var updateRepo: String { didSet { d.set(updateRepo, forKey: "updateRepo") } }
     /// Hours before a review request counts as waiting too long. 0 = off.
     @Published var agingHours: Int { didSet { d.set(agingHours, forKey: "agingHours") } }
+    /// Review sidebar: files under folder headers instead of one flat list.
+    @Published var reviewGroupByFolder: Bool { didSet { d.set(reviewGroupByFolder, forKey: "reviewGroupByFolder") } }
     @Published var standupReminder: Bool { didSet { d.set(standupReminder, forKey: "standupReminder") } }
     /// Minutes after midnight, weekdays. Default 09:30.
     @Published var standupMinutes: Int { didSet { d.set(standupMinutes, forKey: "standupMinutes") } }
@@ -73,6 +75,7 @@ final class Config: ObservableObject {
         groupByRepo = d.object(forKey: "groupByRepo") as? Bool ?? false
         projectFilter = d.string(forKey: "projectFilter") ?? ""
         agingHours = d.object(forKey: "agingHours") as? Int ?? 24
+        reviewGroupByFolder = d.object(forKey: "reviewGroupByFolder") as? Bool ?? true
         repoRoots = d.string(forKey: "repoRoots") ?? "~/Desktop/works"
         deepReview = d.object(forKey: "deepReview") as? Bool ?? true
         autoAIReview = d.object(forKey: "autoAIReview") as? Bool ?? true
