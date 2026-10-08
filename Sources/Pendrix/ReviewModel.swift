@@ -174,6 +174,34 @@ final class ReviewModel: ObservableObject {
         return r is NSTextView || r is NSTextField
     }
 
+    // MARK: paths → clipboard / editor
+
+    /// Absolute path inside the user's own clone, when one exists under the configured roots.
+    func localPath(for relative: String) -> String? {
+        guard let d = detail else { return nil }
+        RepoLocator.configuredRoots = Config.shared.repoRoots
+        guard let repo = RepoLocator.locate(d.url) else { return nil }
+        let p = repo + "/" + relative
+        return FileManager.default.fileExists(atPath: p) ? p : nil
+    }
+    func copy(_ s: String, flash label: String = "Copied") {
+        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(s, forType: .string)
+        flash = label
+        Task { try? await Task.sleep(for: .seconds(1.5)); if flash == label { flash = nil } }
+    }
+    func openInEditor(_ relative: String, line: Int? = nil) {
+        guard let p = localPath(for: relative) else { return }
+        // VS Code / Cursor / Zed understand path:line; fall back to the default app for the file
+        for (bundle, exe) in [("com.microsoft.VSCode", "code"), ("com.todesktop.230313mzl4w4u92", "cursor"), ("dev.zed.Zed", "zed")] {
+            if NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) != nil,
+               let cli = ["/usr/local/bin/\(exe)", "/opt/homebrew/bin/\(exe)", FileManager.default.homeDirectoryForCurrentUser.path + "/.local/bin/\(exe)"].first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+                let t = Process(); t.executableURL = URL(fileURLWithPath: cli); t.arguments = ["--goto", line.map { "\(p):\($0)" } ?? p]
+                if (try? t.run()) != nil { return }
+            }
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: p))
+    }
+
     // MARK: viewed files (local, per change)
 
     @Published private(set) var viewed: Set<String> = []

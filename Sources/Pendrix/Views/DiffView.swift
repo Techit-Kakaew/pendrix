@@ -20,7 +20,19 @@ struct DiffView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Text(file.path).font(Type.key).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+                Button { model.copy(file.path) } label: {
+                    Text(file.path).font(Type.key).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+                }
+                .buttonStyle(.plain).help("Click to copy the path · right-click for more")
+                .contextMenu {
+                    Button("Copy path") { model.copy(file.path) }
+                    if let abs = model.localPath(for: file.path) {
+                        Button("Copy absolute path") { model.copy(abs) }
+                        Button("Open in editor") { model.openInEditor(file.path) }
+                        Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: abs)]) }
+                    }
+                }
+                if model.flash == "Copied" { Text("copied").font(Type.meta).foregroundStyle(WorkItem.Tone.done.color) }
                 if file.status == .renamed { Text("from \(file.oldPath)").font(Type.meta).foregroundStyle(.tertiary).lineLimit(1) }
                 Spacer()
                 if zoomPercent != 100 {
@@ -202,6 +214,11 @@ struct DiffView: View {
             .buttonStyle(.plain)
             .help(model.commitMode ? "Comments are made on the whole change, not on a commit" : "Comment on this line")
             .disabled(l.kind == .meta || model.commitMode)
+            .contextMenu {
+                let n = l.newNo ?? l.oldNo ?? 0
+                Button("Copy \(file.path):\(n)") { model.copy("\(file.path):\(n)") }
+                if model.localPath(for: file.path) != nil { Button("Open in editor at line \(n)") { model.openInEditor(file.path, line: n) } }
+            }
             Text(sign).font(mono).foregroundStyle(l.kind == .add ? WorkItem.Tone.done.color : l.kind == .del ? WorkItem.Tone.danger.color : .clear)
                 .frame(width: 12)
             Group {

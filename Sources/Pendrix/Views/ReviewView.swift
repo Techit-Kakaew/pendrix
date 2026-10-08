@@ -287,6 +287,16 @@ struct ReviewView: View {
         .background(shape.fill(selected ? WorkItem.Tone.active.color.opacity(0.16) : .clear))
         .overlay(shape.strokeBorder(selected ? WorkItem.Tone.active.color.opacity(0.45) : .clear, lineWidth: 1))
         .opacity(viewed == true && !selected ? 0.55 : 1)
+        .contextMenu {
+            if status != nil {
+                Button("Copy path") { model.copy(title) }
+                if let abs = model.localPath(for: title) {
+                    Button("Copy absolute path") { model.copy(abs) }
+                    Button("Open in editor") { model.openInEditor(title) }
+                    Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: abs)]) }
+                }
+            }
+        }
     }
 
     private func statusColor(_ s: FileDiff.Status) -> Color {
