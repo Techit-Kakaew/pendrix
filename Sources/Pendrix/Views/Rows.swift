@@ -89,7 +89,6 @@ struct ItemRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
-        .animation(.easeOut(duration: 0.12), value: hover)
         .help(item.url.absoluteString)
         .contextMenu {
             Button("Open in browser") { NSWorkspace.shared.open(item.url) }

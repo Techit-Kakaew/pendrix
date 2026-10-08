@@ -133,6 +133,7 @@ final class Hub: ObservableObject {
         async let j: Void = refreshJira()
         async let g: Void = refreshHosts()
         _ = await (j, g)
+        rebuildLinks()
 
         let all = Set((jira + reviews + ownMRs + todos + approved).map(\.id))
         let fresh = all.subtracting(known)
@@ -355,20 +356,31 @@ final class Hub: ObservableObject {
     }
 
     /// Jira issues an MR/PR mentions in its title or branch. Unknown keys become bare links.
-    func linkedJira(for item: WorkItem) -> [WorkItem] {
-        guard item.change != nil else { return [] }
-        return Self.jiraKeys(in: item.title + " " + item.subtitle).compactMap { key in
-            if let j = jira.first(where: { $0.key == key }) { return j }
-            guard let u = config.jiraURL else { return nil }
-            return WorkItem(id: "jira:\(key)", source: .jira, kind: .issue, key: key, title: "", subtitle: "",
-                            url: u.appendingPathComponent("browse/\(key)"), updated: .distantPast)
+    // Link lookups are read by every row on every render; compute them once per refresh instead of regexing per row.
+    private var linkJiraByItem: [String: [WorkItem]] = [:]
+    private var linkChangesByKey: [String: [WorkItem]] = [:]
+
+    func rebuildLinks() {
+        var byItem: [String: [WorkItem]] = [:], byKey: [String: [WorkItem]] = [:]
+        let jiraByKey = Dictionary(uniqueKeysWithValues: jira.map { ($0.key, $0) })
+        for m in reviews + ownMRs + approved where m.change != nil {
+            let keys = Self.jiraKeys(in: m.title + " " + m.subtitle)
+            guard !keys.isEmpty else { continue }
+            byItem[m.id] = keys.compactMap { key in
+                if let j = jiraByKey[key] { return j }
+                guard let u = config.jiraURL else { return nil }
+                return WorkItem(id: "jira:\(key)", source: .jira, kind: .issue, key: key, title: "", subtitle: "",
+                                url: u.appendingPathComponent("browse/\(key)"), updated: .distantPast)
+            }
+            for k in keys { byKey[k, default: []].append(m) }
         }
+        linkJiraByItem = byItem; linkChangesByKey = byKey
     }
 
+    /// Jira issues an MR/PR mentions in its title or branch. Unknown keys become bare links.
+    func linkedJira(for item: WorkItem) -> [WorkItem] { linkJiraByItem[item.id] ?? [] }
     /// MRs/PRs whose title or branch mentions this Jira issue.
-    func linkedChanges(for issue: WorkItem) -> [WorkItem] {
-        (reviews + ownMRs).filter { Self.jiraKeys(in: $0.title + " " + $0.subtitle).contains(issue.key) }
-    }
+    func linkedChanges(for issue: WorkItem) -> [WorkItem] { linkChangesByKey[issue.key] ?? [] }
 
     func open(_ item: WorkItem) {
         unseen.remove(item.id)
@@ -433,6 +445,7 @@ final class Hub: ObservableObject {
         ]
         unseen = ["gl:mr:1", "gl:todo:9", "jira:PAY-412"]
         lastRefresh = ago(0.03)
+        rebuildLinks()
     }
 
     static func demoDetail() -> ChangeDetail {
