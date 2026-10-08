@@ -213,6 +213,7 @@ enum AIReviewer {
         Include at most one praise, only if something is genuinely well done.
 
         Rules:
+        - SCOPE: review only the lines this MR adds or changes (the "+" lines and their immediate context). Pre-existing code that the MR did not touch is out of scope — do not report issues in it, do not suggest refactors of it, do not ask for tests of unchanged behaviour. The only exception: an unchanged line that the new code breaks (e.g. a caller that now gets a different type) — then anchor the finding on the NEW line that causes it.
         - Report real problems: bugs, races, security, data loss, error handling, API misuse, missing tests for risky logic, misleading names. Skip style that a formatter handles.
         - At most 8 findings, most important first. If the change is fine, return an empty findings array and say so in summary.
         - Be terse: "summary" ≤ 2 sentences; "discussion" ≤ 2 sentences (plus a code block only when it changes the outcome). Total output well under 400 words.
@@ -260,7 +261,7 @@ enum AIReviewer {
         let prompt = """
         You are pair-reviewing a merge request with a human. They point at ONE line (marked ">>") and ask a question. Do not use tools.
         Answer as a review comment they could post, following conventionalcomments.org: pick a label (praise, nitpick, suggestion, issue, todo, question, thought, chore, note, typo, polish, quibble), decorations ⊆ ["blocking","non-blocking","if-minor"], a one-sentence subject, and a discussion of 1–5 sentences with a concrete fix or reassurance (fenced code if useful).
-        If the concern is unfounded, use label "note" and say plainly why. Answer in the language of the question.
+        If the concern is unfounded, use label "note" and say plainly why. Answer in the language of the question. Stay on the pointed line and the change around it; do not review unrelated pre-existing code.
         Output ONLY JSON: {"label": string, "decorations": [string], "subject": string, "discussion": string}
 
         MR: \(d.title)
@@ -317,6 +318,7 @@ enum AIReviewer {
         1. Run `git diff \(base) HEAD --stat` then `git diff \(base) HEAD` to see the change.
         \(graphReady ? "2. A pre-built code graph is available as the `codegraph_explore` tool (and codegraph_callers / codegraph_node). Use it FIRST for every changed or newly called symbol: it returns callers, callees, call paths and blast radius in one call. Fall back to Grep/Read only when the graph has no answer." : "2. For anything that looks wrong, READ the surrounding code (whole file, callers via Grep, existing tests) before deciding.")
         Report only findings you verified in the code; drop suspicions that the context resolves.
+        SCOPE: findings must be about lines this MR adds or changes. Reading callers, tests and surrounding code is for VERIFYING the change, not for reviewing them — do not report pre-existing problems, refactor ideas or missing tests in code the MR did not touch. If untouched code is broken BY the change, anchor the finding on the new line that breaks it.
         Speed matters: issue independent tool calls together in ONE turn (several Read/Grep/codegraph calls at once), never one at a time. Budget: about 12 tool calls in total; stop exploring once the changed code and its direct callers/tests are covered.
         3. Look for: bugs, races, error handling, security, data loss, API/contract misuse, behaviour changes without tests, misleading names. Skip style a formatter handles.
         Do not modify files. Do not run the project's build or tests.
