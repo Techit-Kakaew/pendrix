@@ -36,11 +36,17 @@ struct GlassSurface: ViewModifier {
     var tint: Color? = nil
     var radius: CGFloat = 14
     var interactive = false
+    /// Flat: a translucent fill + hairline instead of Liquid Glass. Same look at a glance, no per-frame refraction.
+    var flat = false
     @Environment(\.isSnapshot) private var isSnapshot
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        if isSnapshot {
+        if flat {
+            content.background(shape.fill(.primary.opacity(0.055)))
+                .background(shape.fill(tint?.opacity(0.06) ?? .clear))
+                .overlay(shape.strokeBorder(tint?.opacity(0.28) ?? Color.primary.opacity(0.08), lineWidth: 1))
+        } else if isSnapshot {
             content.background(shape.fill(.primary.opacity(0.06)))
                 .overlay(shape.strokeBorder(.primary.opacity(0.08), lineWidth: 1))
         } else {
@@ -62,8 +68,8 @@ struct GlassSurface: ViewModifier {
 }
 
 extension View {
-    func glass(tint: Color? = nil, radius: CGFloat = 14, interactive: Bool = false) -> some View {
-        modifier(GlassSurface(tint: tint, radius: radius, interactive: interactive))
+    func glass(tint: Color? = nil, radius: CGFloat = 14, interactive: Bool = false, flat: Bool = false) -> some View {
+        modifier(GlassSurface(tint: tint, radius: radius, interactive: interactive, flat: flat))
     }
 }
 

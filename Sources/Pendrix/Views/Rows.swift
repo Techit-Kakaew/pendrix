@@ -200,6 +200,8 @@ struct SectionCard<Content: View>: View {
     var tint: Color? = nil
     var error: String? = nil
     var empty: String = "Nothing here"
+    /// Lists scroll; Liquid Glass on every card made scrolling stutter, so cards are flat by default.
+    var flat = true
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -216,9 +218,9 @@ struct SectionCard<Content: View>: View {
             } else if count == 0 {
                 Text(empty).font(Type.meta).foregroundStyle(.tertiary).padding(.horizontal, 16).padding(.bottom, 14)
             } else {
-                VStack(spacing: 2) { content }.padding(.horizontal, 4).padding(.bottom, 6)
+                LazyVStack(spacing: 2) { content }.padding(.horizontal, 4).padding(.bottom, 6)
             }
         }
-        .glass(tint: tint)
+        .glass(tint: tint, flat: flat)
     }
 }

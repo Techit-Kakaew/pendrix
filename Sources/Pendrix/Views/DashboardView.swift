@@ -30,13 +30,11 @@ struct DashboardView: View {
     }
 
     private var columns: some View {
-        GlassGroup(spacing: 14) {
-            HStack(alignment: .top, spacing: 14) {
-                jiraColumn.frame(maxWidth: .infinity)
-                gitlabColumn.frame(maxWidth: .infinity)
-            }
-            .padding(.horizontal, 18).padding(.bottom, 18)
+        HStack(alignment: .top, spacing: 14) {
+            jiraColumn.frame(maxWidth: .infinity)
+            gitlabColumn.frame(maxWidth: .infinity)
         }
+        .padding(.horizontal, 18).padding(.bottom, 18)
     }
 
     private var header: some View {
