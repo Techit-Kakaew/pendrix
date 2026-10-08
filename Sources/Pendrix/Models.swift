@@ -35,6 +35,7 @@ struct WorkItem: Identifiable, Hashable {
     var latestCommentAt: Date? = nil
     /// Set for MR/PR items: opens the in-app review window instead of the browser.
     var approvedByMe = false
+    var branch: String? = nil        // source branch of an MR/PR, for copying
     // Jira sub-task → parent
     var parentKey: String? = nil
     var parentTitle: String? = nil
@@ -58,6 +59,10 @@ struct WorkItem: Identifiable, Hashable {
             }
         }
     }
+}
+
+extension WorkItem {
+    func with(_ f: (inout WorkItem) -> Void) -> WorkItem { var c = self; f(&c); return c }
 }
 
 extension Date {

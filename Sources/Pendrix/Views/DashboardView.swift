@@ -163,7 +163,7 @@ struct DashboardView: View {
                         empty: config.anyHostReady ? "Nobody is waiting on you" : "Not connected") {
                 grouped(hub.visibleReviews) { i in
                     ItemRow(item: i, isNew: hub.unseen.contains(i.id), open: { open(i) }, links: hub.linkedJira(for: i), openLink: open,
-                            selected: hub.selectedID == i.id, aging: hub.isAging(i))
+                            selected: hub.selectedID == i.id, aging: hub.isAging(i), aiState: hub.aiState(for: i))
                 }
             }
             if config.anyHostReady || hub.isDemo, hub.anyHostError == nil {
@@ -174,14 +174,14 @@ struct DashboardView: View {
             if (config.anyHostReady || hub.isDemo), hub.anyHostError == nil, !hub.visibleApproved.isEmpty {
                 SectionCard(title: "Approved by you · waiting to merge", count: hub.visibleApproved.count, empty: "") {
                     grouped(hub.visibleApproved) { i in
-                        ItemRow(item: i, isNew: false, open: { open(i) }, links: hub.linkedJira(for: i), openLink: open, selected: hub.selectedID == i.id)
+                        ItemRow(item: i, isNew: false, open: { open(i) }, links: hub.linkedJira(for: i), openLink: open, selected: hub.selectedID == i.id, aiState: hub.aiState(for: i))
                     }
                 }
             }
             if config.anyHostReady || hub.isDemo, hub.anyHostError == nil {
                 SectionCard(title: "My merge requests", count: hub.visibleOwn.count, empty: "No open MRs") {
                     grouped(hub.visibleOwn) { i in
-                        ItemRow(item: i, isNew: false, open: { open(i) }, links: hub.linkedJira(for: i), openLink: open, selected: hub.selectedID == i.id)
+                        ItemRow(item: i, isNew: false, open: { open(i) }, links: hub.linkedJira(for: i), openLink: open, selected: hub.selectedID == i.id, aiState: hub.aiState(for: i))
                     }
                 }
             }

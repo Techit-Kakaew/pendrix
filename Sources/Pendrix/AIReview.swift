@@ -72,8 +72,11 @@ enum ClaudeCLI {
 
     static func run(prompt: String, cwd: String?, tools: [String], allowed: [String], mcpConfig: String?, extra: [String], timeout: TimeInterval) async throws -> String {
         guard let exe = locate() else { throw APIError(message: "claude CLI not found — install Claude Code and run `claude` once to log in") }
-        return try await withCheckedThrowingContinuation { cont in
-            let p = Process()
+        let proc = Process()
+        // Task cancellation (Stop button, closing the app) kills the claude process instead of leaving it running.
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { cont in
+            let p = proc
             p.executableURL = URL(fileURLWithPath: exe)
             var args = ["-p", "--output-format", "json", "--tools", tools.isEmpty ? "" : tools.joined(separator: ",")]
             if !allowed.isEmpty { args += ["--allowedTools", allowed.joined(separator: ",")] }
@@ -113,13 +116,16 @@ enum ClaudeCLI {
                 }
                 let err = String(decoding: errData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
                 let out = String(decoding: outData.prefix(400), as: UTF8.self)
-                cont.resume(throwing: APIError(message: proc.terminationStatus == 15 ? "claude timed out" : "claude failed: \(err.isEmpty ? out : err)"))
+                cont.resume(throwing: APIError(message: Task.isCancelled ? "AI review stopped" : proc.terminationStatus == 15 ? "claude timed out" : "claude failed: \(err.isEmpty ? out : err)"))
             }
             do {
                 try p.run()
                 inPipe.fileHandleForWriting.write(Data(prompt.utf8))
                 try? inPipe.fileHandleForWriting.close()
             } catch { timer.cancel(); cont.resume(throwing: error) }
+            }
+        } onCancel: {
+            if proc.isRunning { proc.terminate() }
         }
     }
 }

@@ -11,6 +11,7 @@ struct ItemRow: View {
     var selected = false
     var aging = false
     var showParent = false
+    var aiState: (running: Bool, drafts: Int)? = nil
     @State private var hover = false
 
     var body: some View {
@@ -26,6 +27,13 @@ struct ItemRow: View {
                         if aging { StatusPill(text: "waiting \(item.updated.relative)", tone: .danger) }
                         if let p = item.pipeline { PipelineMark(status: p) }
                         Spacer(minLength: 0)
+                        if let st = aiState {
+                            if st.running {
+                                ProgressView().controlSize(.mini).help("AI review running")
+                            } else if st.drafts > 0 {
+                                Text("\(st.drafts) ai drafts").font(Type.meta).foregroundStyle(WorkItem.pendingColor).help("AI drafts waiting for you")
+                            }
+                        }
                         if hover, item.change != nil {
                             Button("browser") { NSWorkspace.shared.open(item.url) }
                                 .buttonStyle(.plain).font(Type.meta).foregroundStyle(.secondary)
@@ -93,6 +101,10 @@ struct ItemRow: View {
         .contextMenu {
             Button("Open in browser") { NSWorkspace.shared.open(item.url) }
             Button("Copy link") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(item.url.absoluteString, forType: .string) }
+            if let b = item.branch {
+                Button("Copy branch  \(b)") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(b, forType: .string) }
+                Button("Copy checkout command") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString("git fetch origin \(b) && git checkout \(b)", forType: .string) }
+            }
             if let menu { Divider(); menu }
         }
     }

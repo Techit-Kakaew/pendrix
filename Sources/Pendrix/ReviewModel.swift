@@ -53,17 +53,34 @@ final class ReviewModel: ObservableObject {
     @Published var showDrafts = false          // sidebar "AI drafts" screen selected
     var pendingDrafts: [AIDraft] { aiDrafts.filter { !$0.posted } }
 
+    /// Hub observes start/finish so the inbox can show a spinner and notify when drafts are ready.
+    var onAIStateChange: ((ChangeRef, _ running: Bool, _ drafts: Int, _ error: String?) -> Void)?
+    private var aiTask: Task<Void, Never>?
+
     func runAIReview() async {
         guard let d = detail, !aiRunning else { return }
         aiRunning = true; aiError = nil
-        defer { aiRunning = false }
-        do {
-            let r = try await AIReviewer.review(d)
-            aiSummary = r.summary; aiDrafts = r.drafts; aiSkipped = r.skipped; aiMode = r.mode
-            aiTiming = AIReviewer.lastTiming
-            showDrafts = true; selectedFile = nil
-            persistAI()
-        } catch { aiError = error.localizedDescription }
+        onAIStateChange?(ref, true, 0, nil)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let r = try await AIReviewer.review(d)
+                guard !Task.isCancelled else { return }
+                aiSummary = r.summary; aiDrafts = r.drafts; aiSkipped = r.skipped; aiMode = r.mode
+                aiTiming = AIReviewer.lastTiming
+                showDrafts = true; selectedFile = nil
+                persistAI()
+            } catch { if !Task.isCancelled { aiError = error.localizedDescription } }
+        }
+        aiTask = task
+        await task.value
+        aiRunning = false; aiTask = nil
+        onAIStateChange?(ref, false, pendingDrafts.count, aiError)
+    }
+
+    func stopAIReview() {
+        aiTask?.cancel()
+        aiError = "AI review stopped"
     }
 
     /// Bring back a previous pass for the same head commit; a new push invalidates it (and lets auto-review run again).

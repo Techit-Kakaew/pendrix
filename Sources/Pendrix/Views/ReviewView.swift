@@ -81,7 +81,15 @@ struct ReviewView: View {
             }
             HStack(spacing: 10) {
                 Text(d.author).font(Type.meta).foregroundStyle(.secondary)
-                Text("\(d.sourceBranch) → \(d.targetBranch)").font(Type.key).foregroundStyle(.tertiary).lineLimit(1)
+                Button { model.copy(d.sourceBranch, flash: "Branch copied") } label: {
+                    Text("\(d.sourceBranch) → \(d.targetBranch)").font(Type.key).foregroundStyle(.tertiary).lineLimit(1)
+                }
+                .buttonStyle(.plain).help("Click to copy the source branch · right-click for more")
+                .contextMenu {
+                    Button("Copy source branch") { model.copy(d.sourceBranch, flash: "Branch copied") }
+                    Button("Copy target branch") { model.copy(d.targetBranch, flash: "Branch copied") }
+                    Button("Copy checkout command") { model.copy("git fetch origin \(d.sourceBranch) && git checkout \(d.sourceBranch)", flash: "Command copied") }
+                }
                 HStack(spacing: 4) {
                     Text("\(d.files.count) files").font(Type.meta).foregroundStyle(.secondary)
                     Text("+\(d.additions)").font(Type.key).foregroundStyle(WorkItem.Tone.done.color)
@@ -108,11 +116,15 @@ struct ReviewView: View {
                         } message: { Text(d.title) }
                 }
                 if d.isOpen {
-                    actionButton(model.aiRunning ? "Reviewing…" : "AI review", tone: model.pendingDrafts.isEmpty ? nil : .warn) {
-                        if model.pendingDrafts.isEmpty { Task { await model.runAIReview() } } else { model.showDrafts = true; model.selectedFile = nil }
+                    if model.aiRunning {
+                        actionButton("Stop AI", tone: .danger) { model.stopAIReview() }
+                            .help("Cancel the running AI review (kills the claude process)")
+                    } else {
+                        actionButton("AI review", tone: model.pendingDrafts.isEmpty ? nil : .warn) {
+                            if model.pendingDrafts.isEmpty { Task { await model.runAIReview() } } else { model.showDrafts = true; model.selectedFile = nil }
+                        }
+                        .help("Ask Claude (via the claude CLI) for review comments. Nothing is posted until you press Post.")
                     }
-                    .disabled(model.aiRunning)
-                    .help("Ask Claude (via the claude CLI) for review comments. Nothing is posted until you press Post.")
                 }
                 actionButton("Refresh") { Task { await model.load() } }.keyboardShortcut("r")
                 actionButton("Open in browser") { model.openInBrowser() }

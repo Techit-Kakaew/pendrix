@@ -53,8 +53,11 @@ struct AIDraftsView: View {
             Toggle("Read tickets", isOn: Binding(get: { Config.shared.aiReadTickets }, set: { Config.shared.aiReadTickets = $0 }))
                 .toggleStyle(.checkbox).font(Type.meta).foregroundStyle(.secondary)
                 .help("Pull the linked Jira tickets into the prompt and check the change against them (slower).")
-            Button(model.aiRunning ? "Running…" : "Run again") { Task { await model.runAIReview() } }
-                .buttonStyle(.plain).font(Type.meta).foregroundStyle(.secondary).disabled(model.aiRunning)
+            if model.aiRunning {
+                Button("Stop") { model.stopAIReview() }.buttonStyle(.plain).font(Type.meta).foregroundStyle(WorkItem.Tone.danger.color)
+            } else {
+                Button("Run again") { Task { await model.runAIReview() } }.buttonStyle(.plain).font(Type.meta).foregroundStyle(.secondary)
+            }
             if !model.pendingDrafts.isEmpty {
                 Button("Dismiss all") { for d in model.pendingDrafts { model.dismiss(d) } }
                     .buttonStyle(.plain).font(Type.meta).foregroundStyle(.tertiary)

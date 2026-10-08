@@ -220,11 +220,36 @@ final class Hub: ObservableObject {
 
     /// One model per change for the whole session, so leaving and returning keeps drafts, viewed marks and scroll state.
     private var reviewModels: [ChangeRef: ReviewModel] = [:]
+    @Published var aiRunningRefs: Set<ChangeRef> = []
+    @Published var aiDraftCounts: [ChangeRef: Int] = [:]
+
     func reviewModel(for ref: ChangeRef) -> ReviewModel {
         if let m = reviewModels[ref] { return m }
         let m = ReviewModel(ref: ref, host: host(for: ref), kind: config.host(ref.hostID)?.kind ?? .gitlab)
+        m.onAIStateChange = { [weak self] ref, running, drafts, error in
+            guard let self else { return }
+            if running { aiRunningRefs.insert(ref) } else {
+                aiRunningRefs.remove(ref); aiDraftCounts[ref] = drafts
+                // tell the user only when they are looking at something else
+                if route != .review(ref), error == nil { notifyAIDone(ref, drafts: drafts) }
+            }
+        }
         reviewModels[ref] = m
         return m
+    }
+    func aiState(for item: WorkItem) -> (running: Bool, drafts: Int) {
+        guard let c = item.change else { return (false, 0) }
+        return (aiRunningRefs.contains(c), aiDraftCounts[c] ?? 0)
+    }
+    private func notifyAIDone(_ ref: ChangeRef, drafts: Int) {
+        guard config.notify, Bundle.main.bundleIdentifier != nil else { return }
+        let item = (reviews + ownMRs + approved + todos).first { $0.change == ref }
+        let c = UNMutableNotificationContent()
+        c.title = "AI review ready · \(item?.key ?? "!\(ref.number)")"
+        c.body = drafts == 0 ? "No findings — looks clean." : "\(drafts) draft \(drafts == 1 ? "comment" : "comments") to look at."
+        if let data = try? JSONEncoder().encode(ref) { c.userInfo["change"] = String(decoding: data, as: UTF8.self) }
+        if let u = item?.url { c.userInfo["url"] = u.absoluteString }
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "ai.\(ref.hostID).\(ref.number)", content: c, trigger: nil)) { _ in }
     }
 
     // MARK: Standup

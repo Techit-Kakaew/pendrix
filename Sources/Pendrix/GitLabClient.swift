@@ -111,6 +111,7 @@ struct GitLabHost: CodeHost {
             pipeline: m.head_pipeline?.status,
             change: ChangeRef(hostID: config.id, project: String(m.project_id), number: m.iid),
             hostLabel: config.host)
+        .with { $0.branch = m.source_branch }
     }
 
     private func todoItem(_ t: Todo) -> WorkItem? {
