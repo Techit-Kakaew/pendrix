@@ -41,8 +41,9 @@ struct DashboardView: View {
 
     /// Independent scroller per column; keyboard selection scrolls whichever column holds the item.
     private func column<C: View>(@ViewBuilder _ content: () -> C) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView(showsIndicators: false) { content().padding(.bottom, 18) }
+        let body = content()
+        return ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) { body.padding(.bottom, 18) }
                 .onChange(of: hub.selectedID) { _, id in if let id { withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo(id, anchor: .center) } } }
         }
         .frame(maxWidth: .infinity)
