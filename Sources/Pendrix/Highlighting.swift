@@ -22,7 +22,7 @@ actor Highlighting {
 
     /// Lines keyed by `DiffLine.id`. Empty when the language is unknown, so the view falls back to plain text.
     func lines(for file: FileDiff, dark isDark: Bool) -> [Int: AttributedString] {
-        let key = "\(file.path)|\(file.hunks.count)|\(isDark)"
+        let key = "\(file.digest)|\(isDark)"   // content digest: a new push with the same hunk count must not hit the old colours
         if let c = cache[key] { return c }
         let code = file.hunks.flatMap { $0.lines.filter { $0.kind != .meta } }
         guard !code.isEmpty else { return [:] }

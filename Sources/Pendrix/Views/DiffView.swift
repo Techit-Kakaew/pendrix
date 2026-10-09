@@ -143,7 +143,7 @@ struct DiffView: View {
                 }
             }
         }
-        .task(id: "\(file.id)|\(scheme)") {
+        .task(id: "\(file.digest)|\(scheme)") {
             colored = [:]
             let result = await Highlighting.shared.lines(for: file, dark: scheme == .dark)
             // A superseded task (file switched while highlighting) must not overwrite the current file's colours.

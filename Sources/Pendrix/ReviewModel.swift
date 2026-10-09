@@ -299,6 +299,24 @@ final class ReviewModel: ObservableObject {
         viewed = [demo.files[1].digest]
     }
 
+    @Published var updatedBanner: String? = nil
+
+    /// Cheap check on each poll: if the MR head moved, reload everything and say so.
+    func reloadIfHeadMoved() async {
+        guard let host, let cur = detail, !busy else { return }
+        guard let fresh = try? await host.detail(ref) else { return }
+        if fresh.headSHA != cur.headSHA {
+            let before = cur.files.map(\.path)
+            detail = fresh
+            restoreAI(for: fresh)
+            let changed = fresh.files.filter { f in !cur.files.contains { $0.digest == f.digest } }.count
+            updatedBanner = "New commits pushed — \(changed) file\(changed == 1 ? "" : "s") changed\(before.count != fresh.files.count ? ", file list changed" : "")"
+            Task { try? await Task.sleep(for: .seconds(8)); if updatedBanner != nil { updatedBanner = nil } }
+        } else if fresh.threads.count != cur.threads.count {
+            detail = fresh
+        }
+    }
+
     func load() async {
         guard let host else { error = "Account for this change was removed"; return }
         busy = true; defer { busy = false }

@@ -62,6 +62,8 @@ struct ReviewView: View {
             }
             .hidden()
         }
+        .onChange(of: hub.lastRefresh) { _, _ in Task { await model.reloadIfHeadMoved() } }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in Task { await model.reloadIfHeadMoved() } }
         .onChange(of: model.searchActive) { _, on in hub.escapeOwnedBySubview = on || !model.fileQuery.isEmpty }
         .onChange(of: model.fileQuery) { _, q in hub.escapeOwnedBySubview = model.searchActive || !q.isEmpty }
         .onDisappear { hub.escapeOwnedBySubview = false }
@@ -78,6 +80,7 @@ struct ReviewView: View {
                 if !d.isOpen { StatusPill(text: d.state, tone: d.state == "merged" ? .done : .neutral) }
                 Spacer()
                 if let f = model.flash { Text(f).font(Type.meta).foregroundStyle(WorkItem.Tone.done.color).transition(.opacity) }
+                if let u = model.updatedBanner { Text(u).font(Type.meta).foregroundStyle(WorkItem.pendingColor).lineLimit(1) }
                 if model.busy { ProgressView().controlSize(.mini) }
                 if let e = model.error { Text(e).font(Type.meta).foregroundStyle(WorkItem.Tone.danger.color).lineLimit(1).help(e) }
             }
