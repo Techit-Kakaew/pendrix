@@ -99,6 +99,10 @@ struct SettingsView: View {
                 Toggle("Keep review transcripts (shows up in TokenBar, resumable with claude --resume)", isOn: $config.aiPersistSessions)
                 Toggle("Use codegraph index during deep review (faster, fewer tool calls)", isOn: $config.useCodeGraph)
                 Toggle("Read linked Jira tickets (MAR-123 in title/branch) and check the change against them", isOn: $config.aiReadTickets)
+                Toggle("Check against project patterns and flag re-implemented helpers (deep review)", isOn: $config.aiCheckPatterns)
+                TextField("Team conventions (free text, appended to every review)", text: $config.aiGuidelines, axis: .vertical).lineLimit(2...8)
+                Text("Example: \"Handlers never call repositories directly — go through a service. Money is always int64 satang. Use the shared formatThaiDate.\" Repo CLAUDE.md is read automatically during deep review too.")
+                    .font(.caption).foregroundStyle(.secondary)
                 if CodeGraph.isInstalled {
                     Text("codegraph found. Each repo is indexed on its first review (seconds to a minute), then synced incrementally.").font(.caption).foregroundStyle(.secondary)
                 } else {

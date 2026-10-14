@@ -37,6 +37,10 @@ final class Config: ObservableObject {
     @Published var useCodeGraph: Bool { didSet { d.set(useCodeGraph, forKey: "useCodeGraph") } }
     /// Pull linked Jira tickets (keys in the MR title/branch) into the review prompt. Off by default: slower, and not every MR needs it.
     @Published var aiReadTickets: Bool { didSet { d.set(aiReadTickets, forKey: "aiReadTickets") } }
+    /// Deep review also checks the change against the repo's existing patterns and flags re-implemented helpers.
+    @Published var aiCheckPatterns: Bool { didSet { d.set(aiCheckPatterns, forKey: "aiCheckPatterns") } }
+    /// Free-text team conventions appended to every review prompt (naming, layering, error handling, …).
+    @Published var aiGuidelines: String { didSet { d.set(aiGuidelines, forKey: "aiGuidelines") } }
     /// claude -p speed knobs. Model "" = whatever Claude Code defaults to; "sonnet" is 2–3× faster.
     @Published var aiModel: String { didSet { d.set(aiModel, forKey: "aiModel") } }
     @Published var aiEffort: String { didSet { d.set(aiEffort, forKey: "aiEffort") } }
@@ -81,6 +85,8 @@ final class Config: ObservableObject {
         autoAIReview = d.object(forKey: "autoAIReview") as? Bool ?? true
         useCodeGraph = d.object(forKey: "useCodeGraph") as? Bool ?? true
         aiReadTickets = d.object(forKey: "aiReadTickets") as? Bool ?? false
+        aiCheckPatterns = d.object(forKey: "aiCheckPatterns") as? Bool ?? true
+        aiGuidelines = d.string(forKey: "aiGuidelines") ?? ""
         aiModel = d.string(forKey: "aiModel") ?? "sonnet"
         aiEffort = d.string(forKey: "aiEffort") ?? "medium"
         aiSkipUserHooks = d.object(forKey: "aiSkipUserHooks") as? Bool ?? true

@@ -218,6 +218,12 @@ enum AIReviewer {
     }
 
     /// Deep when a local clone exists and the setting is on: a detached worktree at the MR head, claude with read-only tools.
+    /// Team conventions from Settings, as a prompt section (empty when unset).
+    static func guidelinesBlock() async -> String {
+        let g = await MainActor.run { Config.shared.aiGuidelines.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return g.isEmpty ? "" : "\nTeam conventions (treat deviations as findings, label suggestion/chore):\n\(g)\n"
+    }
+
     /// Linked Jira tickets as text, when the user opted in and Jira is configured.
     static func ticketContext(for d: ChangeDetail) async -> String {
         let (on, ready, site, email, token) = await MainActor.run {
@@ -265,6 +271,7 @@ enum AIReviewer {
         }
         let existing = d.threads.flatMap(\.comments).map(\.body).joined(separator: "\n---\n")
         let tickets = await ticketContext(for: d)
+        let guidelines = await guidelinesBlock()
         let prompt = """
         You are a senior engineer reviewing a merge request. Do not use tools. Output ONLY a JSON object, no prose, no markdown fences:
         {"summary": string, "findings": [{"path": string, "line": integer, "side": "new"|"old", "label": string, "decorations": [string], "subject": string, "discussion": string}]}
@@ -278,6 +285,7 @@ enum AIReviewer {
         Rules:
         - SCOPE: review only the lines this MR adds or changes (the "+" lines and their immediate context). Pre-existing code that the MR did not touch is out of scope — do not report issues in it, do not suggest refactors of it, do not ask for tests of unchanged behaviour. The only exception: an unchanged line that the new code breaks (e.g. a caller that now gets a different type) — then anchor the finding on the NEW line that causes it.
         - Report real problems: bugs, races, security, data loss, error handling, API misuse, missing tests for risky logic, misleading names. Skip style that a formatter handles.
+        - Consistency within the diff: if the same MR solves the same thing two different ways, or adds a helper that another file in this diff already provides, say so (label suggestion). You cannot see the rest of the repo here, so do not guess about it.
         - At most 8 findings, most important first. If the change is fine, return an empty findings array and say so in summary.
         - Be terse: "summary" ≤ 2 sentences; "discussion" ≤ 2 sentences (plus a code block only when it changes the outcome). Total output well under 400 words.
         - The output must be valid JSON: newlines inside strings as \\n, quotes as \\", no trailing commas, no text before or after the object.
@@ -294,7 +302,7 @@ enum AIReviewer {
 
         Existing comments:
         \(existing.isEmpty ? "(none)" : existing)
-        \(tickets.isEmpty ? "" : "\nLinked Jira tickets (what was asked for — check the change actually delivers it, flag scope gaps or extras as findings):\n" + tickets + "\n")
+        \(tickets.isEmpty ? "" : "\nLinked Jira tickets (what was asked for — check the change actually delivers it, flag scope gaps or extras as findings):\n" + tickets + "\n")\(guidelines)
         Diff (format: <sign><line number>| <code>):
         \(diffText)
         """
@@ -380,13 +388,23 @@ enum AIReviewer {
         let base = d.baseSHA.isEmpty ? "origin/\(d.targetBranch)" : d.baseSHA
         let existing = d.threads.flatMap(\.comments).map(\.body).joined(separator: "\n---\n")
         let tickets = await ticketContext(for: d)
+        let guidelines = await guidelinesBlock()
+        let checkPatterns = await MainActor.run { Config.shared.aiCheckPatterns }
+        let patternStep = checkPatterns ? """
+        2b. PATTERNS & REUSE (important to this team). For every new function, component, hook, helper, type or constant the MR adds:
+            - search the repo for an existing equivalent (\(graphReady ? "codegraph_search / codegraph_explore first, then " : "")Grep by name fragments and by what it does, e.g. a formatter, a date helper, an API client, a status badge). If one exists, report label "suggestion" with the existing symbol and its path, and say to reuse or extend it instead of re-implementing. Quote the existing signature so the author can act without searching.
+            - look at how the nearest sibling feature is built (same folder level, same layer: handler / service / repository / component / hook / test) and compare structure, naming, error handling, logging, validation, how requests and responses are shaped, where constants live, how tests are organised. Deviations from the established pattern are findings (label "suggestion", or "chore" when it is mechanical), citing the file that shows the pattern.
+            - if the repo has a CLAUDE.md, CONTRIBUTING.md, ARCHITECTURE.md, docs/ or a lint/style config, read the relevant part first and apply it.
+            Only report when you found the concrete existing code or pattern; never say "there might be a helper for this". One finding per duplicated/deviating thing, anchored on the new code.
+        """ : ""
         let prompt = """
         You are reviewing a merge request inside a checkout of the repository at its head commit. Work the way the /code-review skill does at high effort:
         1. Run `git diff \(base) HEAD --stat` then `git diff \(base) HEAD` to see the change.
         \(graphReady ? "2. A pre-built code graph is available as the `codegraph_explore` tool (and codegraph_callers / codegraph_node). Use it FIRST for every changed or newly called symbol: it returns callers, callees, call paths and blast radius in one call. Fall back to Grep/Read only when the graph has no answer." : "2. For anything that looks wrong, READ the surrounding code (whole file, callers via Grep, existing tests) before deciding.")
         Report only findings you verified in the code; drop suspicions that the context resolves.
         SCOPE: findings must be about lines this MR adds or changes. Reading callers, tests and surrounding code is for VERIFYING the change, not for reviewing them — do not report pre-existing problems, refactor ideas or missing tests in code the MR did not touch. If untouched code is broken BY the change, anchor the finding on the new line that breaks it.
-        Speed matters: issue independent tool calls together in ONE turn (several Read/Grep/codegraph calls at once), never one at a time. Budget: about 12 tool calls in total; stop exploring once the changed code and its direct callers/tests are covered.
+        \(patternStep)
+        Speed matters: issue independent tool calls together in ONE turn (several Read/Grep/codegraph calls at once), never one at a time. Budget: about \(checkPatterns ? 20 : 12) tool calls in total; stop exploring once the changed code, its direct callers/tests\(checkPatterns ? " and the reuse/pattern checks" : "") are covered.
         3. Look for: bugs, races, error handling, security, data loss, API/contract misuse, behaviour changes without tests, misleading names. Skip style a formatter handles.
         Do not modify files. Do not run the project's build or tests.
 
@@ -408,7 +426,7 @@ enum AIReviewer {
 
         Existing comments:
         \(existing.isEmpty ? "(none)" : existing)
-        \(tickets.isEmpty ? "" : "\nLinked Jira tickets (what was asked for — check the change actually delivers it, flag scope gaps or extras as findings):\n" + tickets)
+        \(tickets.isEmpty ? "" : "\nLinked Jira tickets (what was asked for — check the change actually delivers it, flag scope gaps or extras as findings):\n" + tickets)\(guidelines)
         """
         let raw = try await ClaudeCLI.run(prompt: prompt, cwd: wt,
                                           tools: ["Read", "Grep", "Glob", "Bash"],
