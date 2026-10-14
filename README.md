@@ -43,6 +43,8 @@ Deep review: when the MR's repo is cloned under one of the folders in Settings �
 
 Speed: deep review keeps one persistent worktree per repo (`~/Library/Caches/Pendrix/review/`) and, when [codegraph](https://github.com/colbymchenry/codegraph) is installed (`npm i -g @colbymchenry/codegraph`), indexes it on first use and syncs incrementally after that. The graph is handed to claude as an MCP tool (`codegraph_explore`, callers, impact) so callers and blast radius are one call instead of a grep/read loop. Toggle in Settings → AI review, where you also pick the model (sonnet by default, opus for thoroughness), effort, and whether your Claude Code user hooks load during reviews. The AI drafts header shows where the time went (prep, claude duration, turns, tokens).
 
+Patterns & reuse (deep review, Settings → AI review): for every new helper/component/type the MR adds, claude searches the repo (codegraph + grep) for an existing equivalent and compares the change with the nearest sibling feature — duplicated utilities or deviations from the established structure come back as `suggestion`/`chore` drafts citing the existing code. A free-text "Team conventions" box is appended to every review; the repo's own CLAUDE.md is read as well.
+
 Pairing: the AI pass starts automatically when you open a review request (Settings → AI review), so drafts arrive while you read; files it found nothing in show `ai ✓`. Click a line number and press "Ask AI" (with or without a typed question) to get a focused answer about that line as a draft.
 
 ## Suggested changes
