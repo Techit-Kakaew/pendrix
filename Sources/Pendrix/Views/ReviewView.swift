@@ -371,8 +371,9 @@ struct ConversationView: View {
         Scrolling {
             VStack(alignment: .leading, spacing: 16) {
                 if !detail.description.isEmpty {
-                    Text(markdown(detail.description)).font(Type.title).textSelection(.enabled).lineSpacing(3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    MarkdownView(text: detail.description)
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.primary.opacity(0.04)))
                 }
                 ForEach(model.threads(for: nil)) { t in ThreadView(thread: t, model: model) }
                 ComposeBox(text: $draft, placeholder: "Comment on this \(model.kind.noun)…", submit: "Comment", action: {
@@ -415,9 +416,9 @@ struct ThreadView: View {
                     let shown = sug.blocks.isEmpty ? c.body : sug.prose
                     if let p = ConventionalComment.parse(shown) {
                         Text(markdown(p.subject)).font(Type.title).fontWeight(.medium).textSelection(.enabled)
-                        if !p.discussion.isEmpty { Text(markdown(p.discussion)).font(Type.title).textSelection(.enabled).lineSpacing(2) }
+                        if !p.discussion.isEmpty { MarkdownView(text: p.discussion) }
                     } else if !shown.isEmpty {
-                        Text(markdown(shown)).font(Type.title).textSelection(.enabled).lineSpacing(2)
+                        MarkdownView(text: shown)
                     }
                     ForEach(Array(sug.blocks.enumerated()), id: \.offset) { _, b in
                         SuggestionBlockView(code: b.code, original: originalLines(for: thread, above: b.above, below: b.below))

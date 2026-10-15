@@ -295,7 +295,7 @@ final class ReviewModel: ObservableObject {
 
     /// Demo instance for --snapshot.
     init(demo: ChangeDetail) {
-        ref = demo.ref; host = nil; kind = .gitlab; detail = demo; selectedFile = demo.files.first?.path
+        ref = demo.ref; host = nil; kind = .gitlab; detail = demo; selectedFile = ProcessInfo.processInfo.arguments.contains("--conversation") ? nil : demo.files.first?.path
         viewed = [demo.files[1].digest]
     }
 

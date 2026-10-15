@@ -148,7 +148,7 @@ struct DraftCard: View {
                     .padding(8).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.primary.opacity(0.05)))
             } else {
                 let sug = SuggestionMarkdown.parse(draft.body)
-                if !sug.prose.isEmpty || sug.blocks.isEmpty { Text(markdown(sug.blocks.isEmpty ? draft.body : sug.prose)).font(Type.title).textSelection(.enabled).lineSpacing(2) }
+                if !sug.prose.isEmpty || sug.blocks.isEmpty { MarkdownView(text: sug.blocks.isEmpty ? draft.body : sug.prose) }
                 ForEach(Array(sug.blocks.enumerated()), id: \.offset) { _, b in SuggestionBlockView(code: b.code, original: nil) }
             }
             HStack(spacing: 12) {

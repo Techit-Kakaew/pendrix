@@ -498,7 +498,7 @@ final class Hub: ObservableObject {
         let ref = ChangeRef(hostID: UUID(), project: "1", number: 482)
         return ChangeDetail(
             ref: ref, title: "feat(refund): persist idempotency key across retries",
-            description: "Retries were minting a new idempotency key each attempt, so the gateway saw N distinct refunds.\n\nCloses PAY-412.",
+            description: "## What does this MR do :pencil:\n\n- Retries were minting a new idempotency key each attempt, so the gateway saw N distinct refunds.\n- Persist the key on the job **before** the network call.\n\n## How :hammer_pick:\n\n1. `RefundJob.idempotencyKey` is stored via `store.save(job)`\n2. Backoff cap raised to 300s\n\n```swift\nlet key = job.idempotencyKey ?? UUID().uuidString\n```\n\n> Closes PAY-412. See `Tests/RefundWorkerTests.swift`.",
             author: "Nattapong S.", sourceBranch: "feat/refund-idempotency", targetBranch: "main",
             url: URL(string: "https://example.com")!, state: "not_approved", draft: false, approvedByMe: false, approvals: ["Mai P."],
             mergeable: false, pipeline: "success",
