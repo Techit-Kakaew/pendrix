@@ -55,6 +55,8 @@ final class ReviewModel: ObservableObject {
 
     /// Hub observes start/finish so the inbox can show a spinner and notify when drafts are ready.
     var onAIStateChange: ((ChangeRef, _ running: Bool, _ drafts: Int, _ error: String?) -> Void)?
+    /// Pending-draft count for the inbox badge; fires on dismiss / post / restore, not only when a run ends.
+    var onDraftsChange: ((ChangeRef, Int) -> Void)?
     /// What claude is doing, one line per event, newest last. Kept after the run for inspection.
     @Published var aiLog: [String] = []
     @Published var showLog = false
@@ -99,12 +101,14 @@ final class ReviewModel: ObservableObject {
         if s.headSHA == d.headSHA {
             aiSummary = s.summary; aiDrafts = s.drafts; aiSkipped = s.skipped; aiMode = s.mode
             aiAutoStarted = true
+            onDraftsChange?(ref, pendingDrafts.count)
         } else {
             aiStale = !s.drafts.filter { !$0.posted }.isEmpty
         }
     }
     @Published var aiStale = false   // a previous pass existed but the MR moved on
     func persistAI() {
+        onDraftsChange?(ref, pendingDrafts.count)
         guard let d = detail else { return }
         AIReviewer.save(.init(headSHA: d.headSHA, summary: aiSummary, drafts: aiDrafts, skipped: aiSkipped, mode: aiMode ?? .diffOnly), for: ref)
     }

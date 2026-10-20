@@ -234,6 +234,7 @@ final class Hub: ObservableObject {
                 if route != .review(ref), error == nil { notifyAIDone(ref, drafts: drafts) }
             }
         }
+        m.onDraftsChange = { [weak self] ref, n in self?.aiDraftCounts[ref] = n }
         reviewModels[ref] = m
         return m
     }
